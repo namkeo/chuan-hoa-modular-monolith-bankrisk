@@ -20,11 +20,10 @@ services:
 
   # 2. MinIO Object Storage Service
   minio:
-    build:
-      context: ./minio_service
-      dockerfile: Dockerfile
+    image: minio/minio:latest
     container_name: bank_risk_minio
     restart: unless-stopped
+    command: server /data --console-address :9001
     ports:
       - "9010:9000"   # MinIO S3 API (mapped to 9010 on host)
       - "9011:9001"   # MinIO Web Console (mapped to 9011 on host)
@@ -33,6 +32,7 @@ services:
       MINIO_ROOT_PASSWORD: minioadminpassword
     volumes:
       - minio_data_vol:/data   # Docker named volume (isolated from Windows host file watcher & rg.exe)
+
 
   # 3. Bank Risk Analysis FastAPI Gateway Service
   bank_risk_service:
