@@ -1,0 +1,90 @@
+# =============================================================================
+# CAMELS rating / scoring rules — derived from the SBV credit-institution rating
+# regulation (Thông tư xếp hạng TCTD, e.g. 52/2018/TT-NHNN và VBHN liên quan).
+#
+# These convert raw metrics into a 1 (best) .. 5 (worst) component score, mirroring
+# the supervisory rating ladder. Thresholds are TEMPLATE values and marked
+# REVIEW_REQUIRED until confirmed against the rating regulation PDF.
+#
+# scoring: for each metric, bands are evaluated top-to-bottom; first match wins.
+# direction "higher_better" -> larger value = lower (better) score.
+# direction "lower_better"  -> larger value = higher (worse) score.
+# =============================================================================
+
+meta:
+  status: REVIEW_REQUIRED
+  scale: "1 = An toàn/Tốt, 5 = Yếu kém/Đặc biệt"
+  source: "Tham chiếu quy định xếp hạng TCTD của NHNN (cần đối chiếu văn bản gốc)."
+  weights:        # component weights for the composite CAMELS rating
+    capital: 0.20      # C
+    asset_quality: 0.25 # A
+    management: 0.10    # M
+    earnings: 0.15      # E
+    liquidity: 0.20     # L
+    sensitivity: 0.10   # S
+
+components:
+  capital:           # C
+    car_solo:
+      direction: higher_better
+      bands: [{le: 8, score: 5}, {le: 9, score: 4}, {le: 11, score: 3}, {le: 13, score: 2}, {gt: 13, score: 1}]
+    equity_to_assets:
+      direction: higher_better
+      bands: [{le: 4, score: 5}, {le: 6, score: 4}, {le: 8, score: 3}, {le: 10, score: 2}, {gt: 10, score: 1}]
+
+  asset_quality:     # A
+    npl_ratio:
+      direction: lower_better
+      bands: [{le: 1, score: 1}, {le: 2, score: 2}, {le: 3, score: 3}, {le: 5, score: 4}, {gt: 5, score: 5}]
+    group2_ratio:
+      direction: lower_better
+      bands: [{le: 1, score: 1}, {le: 2, score: 2}, {le: 3, score: 3}, {le: 5, score: 4}, {gt: 5, score: 5}]
+    llr_coverage:
+      direction: higher_better
+      bands: [{le: 30, score: 5}, {le: 50, score: 4}, {le: 70, score: 3}, {le: 100, score: 2}, {gt: 100, score: 1}]
+
+  management:        # M  (proxy: cost efficiency, accrued interest days)
+    cir:
+      direction: lower_better
+      bands: [{le: 35, score: 1}, {le: 45, score: 2}, {le: 55, score: 3}, {le: 65, score: 4}, {gt: 65, score: 5}]
+
+  earnings:          # E
+    roa:
+      direction: higher_better
+      bands: [{le: 0.3, score: 5}, {le: 0.5, score: 4}, {le: 1.0, score: 3}, {le: 1.5, score: 2}, {gt: 1.5, score: 1}]
+    roe:
+      direction: higher_better
+      bands: [{le: 5, score: 5}, {le: 8, score: 4}, {le: 12, score: 3}, {le: 18, score: 2}, {gt: 18, score: 1}]
+    nim:
+      direction: higher_better
+      bands: [{le: 1.5, score: 5}, {le: 2.5, score: 3}, {le: 3.5, score: 2}, {gt: 3.5, score: 1}]
+
+  liquidity:         # L
+    ldr:
+      direction: lower_better
+      bands: [{le: 70, score: 1}, {le: 80, score: 2}, {le: 85, score: 3}, {le: 90, score: 4}, {gt: 90, score: 5}]
+    liquidity_reserve_ratio:
+      direction: higher_better
+      bands: [{le: 10, score: 5}, {le: 13, score: 4}, {le: 16, score: 3}, {le: 20, score: 2}, {gt: 20, score: 1}]
+    avg_liquid_asset_ratio:   # tài sản thanh khoản cao BQ / tổng TS BQ — REVIEW_REQUIRED
+      direction: higher_better
+      bands: [{le: 8, score: 5}, {le: 12, score: 4}, {le: 15, score: 3}, {le: 20, score: 2}, {gt: 20, score: 1}]
+    st_funding_for_mlt_loans:
+      direction: lower_better
+      bands: [{le: 20, score: 1}, {le: 25, score: 2}, {le: 30, score: 3}, {le: 34, score: 4}, {gt: 34, score: 5}]
+
+  sensitivity:       # S
+    fx_position_ratio:
+      direction: abs_lower_better
+      bands: [{le: 5, score: 1}, {le: 10, score: 2}, {le: 15, score: 3}, {le: 20, score: 4}, {gt: 20, score: 5}]
+    rate_sensitive_gap_ratio:
+      direction: abs_lower_better
+      bands: [{le: 10, score: 1}, {le: 20, score: 2}, {le: 30, score: 3}, {le: 50, score: 4}, {gt: 50, score: 5}]
+
+# Mapping from composite weighted score (1..5) to supervisory rating label.
+rating_bands:
+  - {le: 1.5, label: "A - An toàn", risk_level: LOW}
+  - {le: 2.5, label: "B - Khá", risk_level: LOW}
+  - {le: 3.5, label: "C - Trung bình", risk_level: MEDIUM}
+  - {le: 4.5, label: "D - Yếu", risk_level: HIGH}
+  - {gt: 4.5, label: "E - Yếu kém/Kiểm soát đặc biệt", risk_level: CRITICAL}

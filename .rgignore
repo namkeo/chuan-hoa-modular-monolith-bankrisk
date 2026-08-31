@@ -1,0 +1,25 @@
+# Exclude heavy data folders, binary stores, and build outputs from ripgrep (rg.exe) indexing
+minio_data/
+minio_data/**
+mongo_data/
+mongo_data/**
+outputs/
+outputs/**
+node_modules/
+**/node_modules/
+.venv/
+**/.venv/
+.pytest_cache/
+__pycache__/
+dist/
+**/dist/
+*.log
+*.bin
+*.db
+*.sqlite3
+*.tar.gz
+*.zip
+*.parquet
+*.xlsx
+*.xls
+*.csv

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # MongoDB Service
+  mongodb:
+    image: mongo:latest
+    container_name: credit-scoring-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: "12345678"
+      MONGO_INITDB_DATABASE: credit_scoring_db
+    volumes:
+      - mongo_data:/data/db
+
+  # Backend FastAPI Service (Port 8001)
+  backend:
+    build: .
+    container_name: credit-scoring-backend
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URI=mongodb://admin:12345678@mongodb:27017/
+      - MONGO_DB_NAME=credit_scoring_db
+      - PORT=8001
+    depends_on:
+      - mongodb
+
+volumes:
+  mongo_data:

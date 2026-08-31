@@ -1,0 +1,108 @@
+services:
+  # 1. Dedicated Containerized MongoDB Service
+  mongodb:
+    image: mongo:7.0
+    container_name: bank_risk_mongodb
+    restart: unless-stopped
+    ports:
+      - "27018:27017" # Mapped to port 27018 on host machine to avoid port 27017 conflict!
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: 12345678
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\").ok' --quiet || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - mongo_data_vol:/data/db
+
+  # 2. MinIO Object Storage Service
+  minio:
+    build:
+      context: ./minio_service
+      dockerfile: Dockerfile
+    container_name: bank_risk_minio
+    restart: unless-stopped
+    ports:
+      - "9010:9000"   # MinIO S3 API (mapped to 9010 on host)
+      - "9011:9001"   # MinIO Web Console (mapped to 9011 on host)
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    volumes:
+      - minio_data_vol:/data   # Docker named volume (isolated from Windows host file watcher & rg.exe)
+
+  # 3. Bank Risk Analysis FastAPI Gateway Service
+  bank_risk_service:
+    build:
+      context: ./bank_risk_service
+      dockerfile: Dockerfile
+    container_name: bank_risk_fastapi
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - MONGO_URI=${MONGO_URI:-mongodb://admin:12345678@mongodb:27017/}
+      - MONGO_DB=${MONGO_DB:-bank_risk_db}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_BUCKET=${MINIO_BUCKET:-bankrisk-files}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # 4. Credit Scoring & Ranking FastAPI Service
+  xep_hang_service:
+    build:
+      context: ./xep_hang_service
+      dockerfile: Dockerfile
+    container_name: bank_risk_xep_hang
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      - MONGO_URI=${MONGO_URI:-mongodb://admin:12345678@mongodb:27017/}
+      - MONGODB_URL=${MONGO_URI:-mongodb://admin:12345678@mongodb:27017/}
+      - MONGO_DB_NAME=${MONGO_DB_SCORING:-credit_scoring_db}
+      - MONGODB_DB_NAME=${MONGO_DB_SCORING:-credit_scoring_db}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # 5. Unified Web FE & Express Gateway Service
+  web_fe:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: bank_risk_web_fe
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - MONGO_URI=${MONGO_URI:-mongodb://admin:12345678@mongodb:27017/}
+      - FASTAPI_URL=http://bank_risk_service:8080
+      - BE_URL=http://xep_hang_service:8088
+      - XEP_HANG_URL=http://xep_hang_service:8088
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      bank_risk_service:
+        condition: service_started
+      xep_hang_service:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mongo_data_vol:
+  minio_data_vol:
+
+

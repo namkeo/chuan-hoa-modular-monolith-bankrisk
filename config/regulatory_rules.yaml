@@ -1,0 +1,412 @@
+# =============================================================================
+# Regulatory rule set — SBV (Ngân hàng Nhà nước) prudential limits & safety ratios
+#
+# Each rule is applied per bank, per period, per metric by src/rule_engine.py.
+# Thresholds below reflect the well-known public limits in the source circulars,
+# but every rule carries a `status`:
+#   ACTIVE          -> threshold is stable / unambiguous in the source text.
+#   REVIEW_REQUIRED -> threshold varies by institution type / roadmap / year, or
+#                      could not be confidently auto-extracted. The auditor MUST
+#                      confirm before relying on the CRITICAL flag.
+#
+# The PDF extractor (src/pdf_rule_extractor.py) writes candidate thresholds to
+# outputs/exports/extracted_rules_review.csv so these can be cross-checked
+# against the actual legal text in the project PDFs.
+#
+# Comparison semantics: a rule FIRES (is a finding) when the metric VIOLATES the
+# limit. e.g. operator '<' threshold 8 on CAR means "fires when CAR < 8".
+# Severity CRITICAL is reserved for breaches of mandatory SBV legal limits.
+# =============================================================================
+
+meta:
+  framework: "CAMELS + giới hạn, tỷ lệ bảo đảm an toàn (Thông tư 22/2019/TT-NHNN và VBHN)"
+  units_note: "Tỷ lệ tính bằng %; số tiền Tỷ đồng."
+  disclaimer: >
+    Kết quả là công cụ hỗ trợ kiểm toán, KHÔNG thay thế kết luận chuyên môn của
+    kiểm toán viên. Ngưỡng pháp lý phải được KTV xác nhận với văn bản gốc.
+
+rules:
+  # ----------------------------- C – AN TOÀN VỐN -----------------------------
+  - rule_id: CAR_CONSOLIDATED_MIN
+    rule_name: "Tỷ lệ an toàn vốn tối thiểu (hợp nhất)"
+    legal_source: "Thông tư 41/2016/TT-NHNN; VBHN 02/VBHN-NHNN"
+    article_reference: "Điều 6"
+    risk_domain: capital
+    metric: car_consolidated
+    formula: "Vốn tự có hợp nhất / RWA hợp nhất"
+    operator: "<"
+    threshold: 8.0
+    severity: CRITICAL
+    status: ACTIVE
+    description: "CAR hợp nhất dưới 8% là vi phạm tỷ lệ an toàn vốn tối thiểu."
+    audit_recommendation: "Đối chiếu vốn tự có và RWA cấp hợp nhất; rà soát các công ty con hợp nhất."
+
+  - rule_id: TIER1_MIN
+    rule_name: "Tỷ lệ vốn cấp 1 tối thiểu"
+    legal_source: "Thông tư 41/2016/TT-NHNN"
+    article_reference: "Điều 6 - vốn cấp 1 tối thiểu 6%"
+    risk_domain: capital
+    metric: car_tier1
+    operator: "<"
+    threshold: 6.0
+    severity: CRITICAL
+    status: REVIEW_REQUIRED
+    description: "Tỷ lệ vốn cấp 1 dưới 6%. Cần xác nhận ngưỡng với văn bản gốc."
+    audit_recommendation: "Xác nhận định nghĩa vốn cấp 1 và ngưỡng áp dụng theo lộ trình."
+
+  - rule_id: CAPITAL_CONTRIBUTION_LIMIT
+    rule_name: "Giới hạn góp vốn, mua cổ phần"
+    legal_source: "Luật các TCTD; VBHN 02/VBHN-NHNN"
+    article_reference: "Giới hạn góp vốn, mua cổ phần ≤ 40% vốn điều lệ và quỹ dự trữ"
+    risk_domain: capital
+    metric: capital_contribution_ratio
+    operator: ">"
+    threshold: 40.0
+    severity: CRITICAL
+    status: REVIEW_REQUIRED
+    description: "Tỷ lệ góp vốn, mua cổ phần / VĐL và quỹ vượt 40%."
+    audit_recommendation: "Rà soát danh mục góp vốn, đầu tư dài hạn và tổng mức so với VĐL + quỹ."
+
+  - rule_id: EQUITY_TO_ASSETS_LOW
+    rule_name: "Đòn bẩy cao — vốn chủ sở hữu mỏng"
+    legal_source: "Chỉ tiêu giám sát CAMELS (C) — cảnh báo nội bộ"
+    article_reference: "—"
+    risk_domain: capital
+    metric: equity_to_assets
+    operator: "<"
+    threshold: 5.0
+    severity: MEDIUM
+    status: ACTIVE
+    description: "Vốn chủ sở hữu / tổng tài sản dưới 5% — đòn bẩy cao."
+    audit_recommendation: "Đánh giá khả năng hấp thụ tổn thất."
+
+  # --------------------------- A – CHẤT LƯỢNG TÀI SẢN ------------------------
+  - rule_id: NPL_RATIO_LIMIT
+    rule_name: "Tỷ lệ nợ xấu vượt ngưỡng kiểm soát 3%"
+    legal_source: "Định hướng điều hành NHNN; Nghị quyết về xử lý nợ xấu"
+    article_reference: "Mục tiêu kiểm soát nợ xấu nội bảng < 3%"
+    risk_domain: credit
+    metric: npl_ratio
+    operator: ">"
+    threshold: 3.0
+    severity: HIGH
+    status: ACTIVE
+    description: "Tỷ lệ nợ xấu nội bảng vượt 3% — vượt ngưỡng kiểm soát định hướng."
+    audit_recommendation: "Rà soát phân loại nợ, trích lập dự phòng, nợ tái cơ cấu và VAMC."
+
+  - rule_id: NPL_RATIO_CRITICAL
+    rule_name: "Tỷ lệ nợ xấu ở mức nghiêm trọng"
+    legal_source: "Cảnh báo giám sát KTNN"
+    article_reference: "—"
+    risk_domain: credit
+    metric: npl_ratio
+    operator: ">"
+    threshold: 5.0
+    severity: CRITICAL
+    status: REVIEW_REQUIRED
+    description: "Nợ xấu vượt 5% — mức rủi ro tín dụng nghiêm trọng cần kiểm tra sâu."
+    audit_recommendation: "Kiểm tra hồ sơ phân loại nợ, chất lượng tài sản bảo đảm, đầy đủ dự phòng."
+
+  - rule_id: GROUP2_HIGH
+    rule_name: "Nợ nhóm 2 cao — nợ xấu tiềm ẩn"
+    legal_source: "Chỉ tiêu giám sát CAMELS (A)"
+    article_reference: "—"
+    risk_domain: credit
+    metric: group2_ratio
+    operator: ">"
+    threshold: 3.0
+    severity: MEDIUM
+    status: ACTIVE
+    description: "Tỷ lệ nợ nhóm 2 cao báo hiệu nợ xấu tiềm ẩn."
+    audit_recommendation: "Theo dõi dịch chuyển nhóm nợ, dấu hiệu che giấu nợ xấu."
+
+  - rule_id: LLR_COVERAGE_LOW
+    rule_name: "Tỷ lệ bao phủ nợ xấu thấp"
+    legal_source: "Chỉ tiêu giám sát CAMELS (A)"
+    article_reference: "—"
+    risk_domain: credit
+    metric: llr_coverage
+    operator: "<"
+    threshold: 50.0
+    severity: MEDIUM
+    status: ACTIVE
+    description: "Dự phòng / nợ xấu (LLR) dưới 50% — đệm dự phòng mỏng."
+    audit_recommendation: "Đối chiếu trích lập dự phòng theo phân loại nợ thực tế."
+
+  # --------------------------- L – KHẢ NĂNG THANH KHOẢN ---------------------
+  # ----------------------------- E – KHẢ NĂNG SINH LỜI ----------------------
+  - rule_id: ROA_LOW
+    rule_name: "ROA thấp — hiệu quả sinh lời yếu"
+    legal_source: "Chỉ tiêu giám sát CAMELS (E)"
+    article_reference: "—"
+    risk_domain: profitability
+    metric: roa
+    operator: "<"
+    threshold: 0.5
+    severity: MEDIUM
+    status: ACTIVE
+    description: "ROA dưới 0,5% — khả năng sinh lời yếu, đệm lợi nhuận mỏng."
+    audit_recommendation: "Phân tích cơ cấu thu nhập, chi phí dự phòng ăn mòn lợi nhuận."
+
+  - rule_id: CIR_HIGH
+    rule_name: "CIR cao — hiệu quả chi phí kém"
+    legal_source: "Chỉ tiêu giám sát CAMELS (E)"
+    article_reference: "—"
+    risk_domain: profitability
+    metric: cir
+    operator: ">"
+    threshold: 60.0
+    severity: LOW
+    status: ACTIVE
+    description: "Tỷ lệ chi phí/thu nhập (CIR) trên 60%."
+    audit_recommendation: "Đánh giá hiệu quả hoạt động và kiểm soát chi phí."
+
+  # ----------------------------- S – NHẠY CẢM RỦI RO -------------------------
+  - rule_id: FX_POSITION_LIMIT
+    rule_name: "Trạng thái ngoại tệ vượt giới hạn"
+    legal_source: "Quy định trạng thái ngoại tệ của NHNN"
+    article_reference: "Tổng trạng thái ngoại tệ ≤ 20% vốn tự có"
+    risk_domain: market
+    metric: fx_position_ratio
+    operator: "outside_range"
+    threshold: [-20.0, 20.0]
+    severity: HIGH
+    status: REVIEW_REQUIRED
+    description: "Tỷ lệ trạng thái ngoại tệ / vốn tự có ngoài khoảng ±20%."
+    audit_recommendation: "Đối chiếu cách tính tổng trạng thái ngoại tệ dương/âm."
+
+  # ------------------ Cảnh báo xu hướng (early-warning, không pháp lý) -------
+  - rule_id: CREDIT_GROWTH_HOT
+    rule_name: "Tăng trưởng tín dụng nóng"
+    legal_source: "Cảnh báo nội bộ KTNN"
+    article_reference: "—"
+    risk_domain: credit
+    metric: credit_growth_yoy
+    operator: ">"
+    threshold: 30.0
+    severity: HIGH
+    status: ACTIVE
+    description: "Tăng trưởng tín dụng so cùng kỳ trên 30% — tăng trưởng nóng, rủi ro chất lượng tài sản."
+    audit_recommendation: "Đối chiếu hạn mức tăng trưởng tín dụng được NHNN giao và chất lượng khoản vay mới."
+
+  # ===========================================================================
+  # NGƯỠNG GIÁM SÁT AN TOÀN THEO LOẠI HÌNH TCTD
+  #   QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024 — TCTD & chi nhánh NH nước ngoài
+  #   QĐ 618/QĐ-TTGSNH3 ngày 07/09/2024 — tổ chức tài chính vi mô
+  #
+  # Khác với rule ngưỡng phẳng ở trên, các rule này dùng `tiers_by_type`: ngưỡng
+  # phụ thuộc LOẠI HÌNH TCTD (khai báo ở config/institution_types.yaml).
+  #
+  # Ba bậc ngưỡng và hành vi giám sát tương ứng (QĐ 682, Phụ lục 3):
+  #   Ngưỡng 3 -> vi phạm tỷ lệ an toàn   => finding_type VIOLATION, severity CRITICAL
+  #   Ngưỡng 2 -> nguy cơ dẫn tới vi phạm => finding_type WARNING,   severity HIGH
+  #   Ngưỡng 1 -> tăng cường theo dõi     => finding_type WATCH,     severity MEDIUM
+  # Chỉ Ngưỡng 3 sinh VIOLATION => chỉ Ngưỡng 3 kích hoạt ép CRITICAL ở risk_scoring.
+  #
+  # `direction` quyết định chiều so sánh (QĐ 682, Phụ lục 3, mục 3.1):
+  #   lower_riskier  — giá trị càng NHỎ càng rủi ro (CAR, dự trữ TK, khả năng chi trả)
+  #   higher_riskier — giá trị càng LỚN càng rủi ro (LDR, vốn NH cho vay TDH, TPCP)
+  #
+  # Loại hình KHÔNG có trong `tiers_by_type` nghĩa là QĐ không quy định ngưỡng cho
+  # loại hình đó với chỉ tiêu này => KHÔNG đánh giá (vd QĐ 682 để trống ô LDR của
+  # công ty tài chính / cho thuê tài chính).
+  #
+  # NGUỒN SỐ LIỆU: lấy từ bản OCR PDF gốc QĐ 682 (đối chiếu từng dòng), KHÔNG lấy
+  # từ "Nguong giam sat.docx" — bản .docx đảo cột Ngưỡng 1/Ngưỡng 2 ở 4 ô. Xem
+  # `source_note` của từng rule.
+  # ===========================================================================
+
+  # ----------------------- C – AN TOÀN VỐN (QĐ 682) --------------------------
+  - rule_id: QD682_CAR_SOLO
+    rule_name: "Tỷ lệ an toàn vốn riêng lẻ (CAR) — ngưỡng giám sát theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 1 — Tỷ lệ an toàn vốn riêng lẻ"
+    risk_domain: capital
+    metric: car_solo
+    formula: "Vốn tự có / Tài sản tính theo rủi ro (RWA)"
+    direction: lower_riskier
+    severity: CRITICAL          # mức cao nhất rule có thể sinh (khi vượt Ngưỡng 3)
+    status: ACTIVE
+    tiers_by_type:
+      nhtm_nha_nuoc: { n1: 9.00, n2: 8.50, n3: 8.00 }
+      nhtm_co_phan: { n1: 9.50, n2: 8.50, n3: 8.00 }
+      nh_lien_doanh: { n1: 9.50, n2: 8.50, n3: 8.00 }
+      nh_100_von_ngoai: { n1: 13.00, n2: 11.00, n3: 8.00 }
+      cn_nh_nuoc_ngoai: { n1: 11.00, n2: 9.50, n3: 8.00 }
+      cong_ty_tai_chinh: { n1: 13.00, n2: 11.00, n3: 9.00 }
+      cong_ty_cho_thue_tai_chinh: { n1: 14.00, n2: 11.50, n3: 9.00 }
+    description: "CAR riêng lẻ thấp hơn ngưỡng giám sát tương ứng loại hình TCTD. Ngưỡng 3 (8% với ngân hàng, 9% với công ty tài chính/cho thuê tài chính) là mức vi phạm tỷ lệ an toàn vốn."
+    audit_recommendation: "Kiểm tra cấu phần vốn tự có, RWA, kế hoạch tăng vốn; xác định nguyên nhân và biện pháp khắc phục."
+    source_note: "Khớp giữa .docx và PDF gốc."
+
+  # ------------------- L – KHẢ NĂNG THANH KHOẢN (QĐ 682) ----------------------
+  - rule_id: QD682_LDR
+    rule_name: "Tỷ lệ dư nợ cho vay so với tổng tiền gửi (LDR) — ngưỡng theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 2 — Tỷ lệ dư nợ cho vay so với tổng tiền gửi"
+    risk_domain: liquidity
+    metric: ldr
+    formula: "Tổng dư nợ cho vay / Tổng tiền gửi"
+    direction: higher_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      # QĐ 682 ĐỂ TRỐNG ô của công ty tài chính & cho thuê tài chính -> không áp
+      # ngưỡng LDR cho 2 loại hình này (đã đối chiếu PDF gốc, trang 4).
+      nhtm_nha_nuoc: { n1: 80.00, n2: 83.00, n3: 85.00 }
+      nhtm_co_phan: { n1: 80.00, n2: 83.00, n3: 85.00 }
+      nh_lien_doanh: { n1: 77.00, n2: 81.00, n3: 85.00 }
+      nh_100_von_ngoai: { n1: 81.00, n2: 83.00, n3: 85.00 }
+      cn_nh_nuoc_ngoai: { n1: 78.00, n2: 82.00, n3: 85.00 }
+    description: "LDR vượt ngưỡng giám sát tương ứng loại hình. Ngưỡng 3 = 85% là mức vi phạm giới hạn LDR."
+    audit_recommendation: "Đối chiếu cách xác định dư nợ cho vay và tiền gửi theo Thông tư 22/2019; rà soát cơ cấu nguồn vốn."
+    source_note: "Khớp .docx và PDF gốc. QĐ không quy định LDR cho công ty tài chính/cho thuê tài chính."
+
+  - rule_id: QD682_ST_FUNDING_MLT
+    rule_name: "Tỷ lệ nguồn vốn ngắn hạn cho vay trung–dài hạn — ngưỡng theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 3"
+    risk_domain: liquidity
+    metric: st_funding_for_mlt_loans
+    formula: "Nguồn vốn ngắn hạn sử dụng để cho vay trung và dài hạn / Nguồn vốn ngắn hạn"
+    direction: higher_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      nhtm_nha_nuoc: { n1: 30.00, n2: 32.00, n3: 34.00 }
+      nhtm_co_phan: { n1: 31.00, n2: 33.00, n3: 34.00 }
+      nh_lien_doanh: { n1: 30.00, n2: 32.00, n3: 34.00 }
+      nh_100_von_ngoai: { n1: 30.00, n2: 32.00, n3: 34.00 }
+      cn_nh_nuoc_ngoai: { n1: 28.00, n2: 31.00, n3: 34.00 }
+      cong_ty_tai_chinh: { n1: 75.00, n2: 85.00, n3: 90.00 }
+      cong_ty_cho_thue_tai_chinh: { n1: 85.00, n2: 87.00, n3: 90.00 }
+    description: "Tỷ lệ vốn ngắn hạn cho vay trung–dài hạn vượt ngưỡng giám sát của loại hình (ngân hàng: Ngưỡng 3 = 34%; công ty tài chính/cho thuê tài chính: 90%)."
+    audit_recommendation: "Rà soát kỳ hạn nguồn vốn và dư nợ trung–dài hạn; đối chiếu lộ trình giảm tỷ lệ tại Thông tư 08/2020 sửa đổi TT 22/2019."
+    source_note: "Khớp .docx và PDF gốc."
+
+  - rule_id: QD682_LIQUIDITY_RESERVE
+    rule_name: "Tỷ lệ dự trữ thanh khoản — ngưỡng theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 5"
+    risk_domain: liquidity
+    metric: liquidity_reserve_ratio
+    formula: "Tài sản có tính thanh khoản cao / Tổng nợ phải trả"
+    direction: lower_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      nhtm_nha_nuoc: { n1: 12.00, n2: 11.00, n3: 10.00 }
+      nhtm_co_phan: { n1: 11.50, n2: 10.50, n3: 10.00 }
+      nh_lien_doanh: { n1: 13.00, n2: 11.50, n3: 10.00 }
+      nh_100_von_ngoai: { n1: 14.00, n2: 12.00, n3: 10.00 }
+      cn_nh_nuoc_ngoai: { n1: 15.00, n2: 12.00, n3: 10.00 }
+      cong_ty_tai_chinh: { n1: 3.00, n2: 2.00, n3: 1.00 }
+      cong_ty_cho_thue_tai_chinh: { n1: 3.00, n2: 2.00, n3: 1.00 }
+    description: "Tỷ lệ dự trữ thanh khoản thấp hơn ngưỡng giám sát của loại hình (ngân hàng: Ngưỡng 3 = 10%; công ty tài chính/cho thuê tài chính: 1%)."
+    audit_recommendation: "Đối chiếu danh mục tài sản thanh khoản cao và tổng nợ phải trả theo Thông tư 22/2019."
+    source_note: "PDF gốc: CN NH nước ngoài = 15/12/10. File .docx ghi SAI thành 12/15/10 (đảo Ngưỡng 1 và 2) — đã dùng số của PDF gốc."
+
+  - rule_id: QD682_SOLVENCY_30D_VND
+    rule_name: "Tỷ lệ khả năng chi trả 30 ngày (VND) — ngưỡng theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 6"
+    risk_domain: liquidity
+    metric: solvency_30d_vnd
+    formula: "Tài sản có tính thanh khoản cao / Dòng tiền ra ròng 30 ngày tiếp theo (VND)"
+    direction: lower_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      nhtm_nha_nuoc: { n1: 60.00, n2: 55.00, n3: 50.00 }
+      nhtm_co_phan: { n1: 58.00, n2: 52.00, n3: 50.00 }
+      nh_lien_doanh: { n1: 60.00, n2: 55.00, n3: 50.00 }
+      nh_100_von_ngoai: { n1: 60.00, n2: 55.00, n3: 50.00 }
+      cn_nh_nuoc_ngoai: { n1: 60.00, n2: 55.00, n3: 50.00 }
+      cong_ty_tai_chinh: { n1: 23.00, n2: 21.50, n3: 20.00 }
+      cong_ty_cho_thue_tai_chinh: { n1: 25.00, n2: 22.00, n3: 20.00 }
+    description: "Tỷ lệ khả năng chi trả 30 ngày đối với VND thấp hơn ngưỡng giám sát của loại hình (ngân hàng: Ngưỡng 3 = 50%)."
+    audit_recommendation: "Đối chiếu dòng tiền ra ròng 30 ngày và tài sản thanh khoản cao. Lưu ý QĐ 682: nếu dòng tiền ra ròng 30 ngày bằng 0 hoặc âm thì chỉ theo dõi thông thường."
+    source_note: "PDF gốc: NHTM cổ phần = 58/52/50; NH 100% vốn nước ngoài = 60/55/50; CT cho thuê TC = 25/22/20. File .docx ghi SAI cả 3 ô (đảo Ngưỡng 1 và 2) — đã dùng số của PDF gốc."
+
+  - rule_id: QD682_SOLVENCY_30D_FX
+    rule_name: "Tỷ lệ khả năng chi trả 30 ngày (ngoại tệ) — ngưỡng theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 7"
+    risk_domain: liquidity
+    metric: solvency_30d_fx
+    formula: "Tài sản có tính thanh khoản cao / Dòng tiền ra ròng 30 ngày tiếp theo (ngoại tệ)"
+    direction: lower_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      nhtm_nha_nuoc: { n1: 35.00, n2: 20.00, n3: 10.00 }
+      nhtm_co_phan: { n1: 33.00, n2: 17.00, n3: 10.00 }
+      nh_lien_doanh: { n1: 30.00, n2: 12.00, n3: 10.00 }
+      nh_100_von_ngoai: { n1: 30.00, n2: 12.00, n3: 10.00 }
+      cn_nh_nuoc_ngoai: { n1: 7.00, n2: 6.00, n3: 5.00 }
+      cong_ty_tai_chinh: { n1: 8.00, n2: 6.00, n3: 5.00 }
+      cong_ty_cho_thue_tai_chinh: { n1: 8.00, n2: 6.00, n3: 5.00 }
+    description: "Tỷ lệ khả năng chi trả 30 ngày đối với ngoại tệ thấp hơn ngưỡng giám sát của loại hình (ngân hàng: Ngưỡng 3 = 10%; chi nhánh NH nước ngoài và công ty tài chính/cho thuê tài chính: 5%)."
+    audit_recommendation: "Đối chiếu dòng tiền ra ròng ngoại tệ 30 ngày. Lưu ý QĐ 682: nếu dòng tiền ra ròng bằng 0 hoặc âm thì chỉ theo dõi thông thường."
+    source_note: "Khớp .docx và PDF gốc."
+
+  - rule_id: QD682_GOVBOND
+    rule_name: "Tỷ lệ mua, đầu tư trái phiếu Chính phủ — ngưỡng theo loại hình"
+    legal_source: "QĐ 682/QĐ-TTGSNH4 ngày 30/10/2024; Thông tư 08/2022/TT-NHNN"
+    article_reference: "Phụ lục 1, mục 4"
+    risk_domain: liquidity
+    metric: govbond_ratio
+    formula: "Số dư mua, đầu tư TPCP & TP được CP bảo lãnh / Tổng nợ phải trả bình quân"
+    direction: higher_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      # QĐ 682 ĐỂ TRỐNG ô của công ty cho thuê tài chính (đối chiếu PDF gốc, trang 5).
+      nhtm_nha_nuoc: { n1: 27.00, n2: 29.00, n3: 30.00 }
+      nhtm_co_phan: { n1: 26.00, n2: 28.00, n3: 30.00 }
+      nh_lien_doanh: { n1: 25.00, n2: 27.00, n3: 30.00 }
+      nh_100_von_ngoai: { n1: 26.00, n2: 28.00, n3: 30.00 }
+      cn_nh_nuoc_ngoai: { n1: 23.00, n2: 25.00, n3: 30.00 }
+      cong_ty_tai_chinh: { n1: 23.00, n2: 25.00, n3: 30.00 }
+    description: "Tỷ lệ mua, đầu tư trái phiếu Chính phủ vượt ngưỡng giám sát của loại hình (Ngưỡng 3 = 30%)."
+    audit_recommendation: "Đối chiếu số dư TPCP và tổng nợ phải trả bình quân theo Thông tư 22/2019."
+    source_note: "Khớp .docx và PDF gốc. QĐ không quy định ngưỡng TPCP cho công ty cho thuê tài chính."
+
+  # ------------- TỔ CHỨC TÀI CHÍNH VI MÔ (QĐ 618/QĐ-TTGSNH3) ------------------
+  - rule_id: QD618_TCTCVM_CAR
+    rule_name: "Tỷ lệ an toàn vốn tối thiểu (CAR) của TCTCVM — ngưỡng theo tổ chức"
+    legal_source: "QĐ 618/QĐ-TTGSNH3 ngày 07/09/2024"
+    article_reference: "Mục 1 — Ngưỡng giám sát an toàn vi mô"
+    risk_domain: capital
+    metric: car_solo
+    formula: "Vốn tự có / Tổng tài sản 'Có' rủi ro (theo quy định đối với TCTCVM)"
+    direction: lower_riskier
+    severity: CRITICAL
+    status: ACTIVE
+    tiers_by_type:
+      tctcvm_tinh_thuong: { n1: 21.00, n2: 15.50, n3: 10.00 }
+      tctcvm_lao_dong_ngheo: { n1: 23.00, n2: 16.50, n3: 10.00 }
+      tctcvm_m7: { n1: 17.00, n2: 13.50, n3: 10.00 }
+      tctcvm_thanh_hoa: { n1: 15.30, n2: 13.30, n3: 10.00 }
+    description: "CAR của TCTCVM thấp hơn ngưỡng giám sát riêng của từng tổ chức. Ngưỡng 3 = 10% là mức vi phạm tỷ lệ an toàn vốn."
+    audit_recommendation: "Đối chiếu vốn tự có và tài sản có rủi ro của TCTCVM; xác định nguyên nhân suy giảm."
+    source_note: "Từ .docx; OCR PDF 618 chất lượng thấp nhưng mọi số đọc được đều khớp và nhất quán N1>=N2>=N3."
+
+  - rule_id: QD618_TCTCVM_SOLVENCY
+    rule_name: "Tỷ lệ khả năng chi trả của TCTCVM — ngưỡng theo tổ chức"
+    legal_source: "QĐ 618/QĐ-TTGSNH3 ngày 07/09/2024"
+    article_reference: "Mục 1 — Ngưỡng giám sát an toàn vi mô"
+    risk_domain: liquidity
+    metric: tctcvm_solvency_ratio
+    formula: "Theo quy định về tỷ lệ khả năng chi trả đối với TCTCVM"
+    direction: lower_riskier
+    severity: CRITICAL
+    status: REVIEW_REQUIRED
+    tiers_by_type:
+      tctcvm_tinh_thuong: { n1: 23.40, n2: 22.10, n3: 20.00 }
+      tctcvm_lao_dong_ngheo: { n1: 24.80, n2: 23.10, n3: 20.00 }
+      tctcvm_m7: { n1: 25.10, n2: 23.20, n3: 20.00 }
+      tctcvm_thanh_hoa: { n1: 24.70, n2: 23.70, n3: 20.00 }
+    description: "Tỷ lệ khả năng chi trả của TCTCVM thấp hơn ngưỡng giám sát riêng của tổ chức. Ngưỡng 3 = 20%."
+    audit_recommendation: "Yêu cầu TCTCVM cung cấp tỷ lệ khả năng chi trả — chỉ tiêu này hiện KHÔNG có trong bộ dữ liệu."
+    source_note: "REVIEW_REQUIRED: 4 TCTCVM trong bộ dữ liệu không báo cáo chỉ tiêu này nên chưa có nhãn nguồn để map; KTV cần xác nhận tên chỉ tiêu gốc trong biểu báo cáo trước khi kích hoạt."

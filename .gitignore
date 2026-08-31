@@ -1,0 +1,27 @@
+# Ignore data and binary directories
+minio_data/
+mongo_data/
+outputs/
+node_modules/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+__pycache__/
+.idea/
+.vscode/
+
+# Environment and sensitive files
+.env
+.env.*
+
+# Logs and databases
+*.log
+*.bin
+*.db
+*.sqlite3
+*.tar.gz
+*.zip
+*.parquet
+
