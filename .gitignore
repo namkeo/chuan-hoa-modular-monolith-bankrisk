@@ -1,6 +1,7 @@
 # Ignore data and binary directories
 minio_data/
 mongo_data/
+data_all/
 outputs/
 node_modules/
 dist/
