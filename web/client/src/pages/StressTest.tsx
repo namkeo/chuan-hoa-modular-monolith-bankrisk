@@ -33,7 +33,17 @@ export default function StressTest() {
   if (!stress || !stress.scenarios?.length || !stress.results?.length)
     return <Empty text={`Chưa có dữ liệu stress-test cho tần suất '${freq}'. Khuyến nghị dùng tần suất Tháng.`} />;
 
-  const P = asof.period;
+  const availablePeriods = Array.from(new Set((stress.results || []).map((r: any) => r.period))).filter(Boolean) as string[];
+  const selPeriod = asof.period;
+
+  let P = availablePeriods.find((p) => p === selPeriod);
+  if (!P && selPeriod) {
+    P = availablePeriods.find((p) => selPeriod.startsWith(p) || p.startsWith(selPeriod.substring(0, 7)) || p.startsWith(selPeriod.substring(0, 4)));
+  }
+  if (!P) {
+    P = availablePeriods[availablePeriods.length - 1] || selPeriod;
+  }
+
   const scenarios = stress.scenarios;
   const curScn = scenarios.find((s) => s.id === scn) ? scn : scenarios[0].id;
   const scnMeta = scenarios.find((s) => s.id === curScn);
@@ -54,8 +64,8 @@ export default function StressTest() {
   });
 
   // Breaking points (reverse stress) for the selected period.
-  const breaking = stress.breaking_points
-    .filter((b) => b.period === P && b.breaking_npl_pp != null)
+  const breaking = (stress.breaking_points || [])
+    .filter((b) => (b.period === P || (P && b.period && P.startsWith(b.period))) && b.breaking_npl_pp != null)
     .sort((a, b) => a.breaking_npl_pp - b.breaking_npl_pp).slice(0, 15);
 
   return (

@@ -16,8 +16,16 @@ export default function Anomaly() {
   const [note, setNote] = useState("");
   if (!data || data.empty) return null;
 
-  // Anomalies as of the selected period.
-  const an = data.anomalies.filter((a) => a.period === asof.period);
+  // Anomalies as of the selected period (using flexible asof filter with deduplication per bank).
+  const rawAnomalies = asof.filter(data?.anomalies || []);
+  const latestByBank = new Map<string, any>();
+  rawAnomalies.forEach((a: any) => {
+    if (!a.bank_id) return;
+    if (!latestByBank.has(a.bank_id) || (a.period || "") > (latestByBank.get(a.bank_id).period || "")) {
+      latestByBank.set(a.bank_id, a);
+    }
+  });
+  const an = Array.from(latestByBank.values()).sort((a, b) => (b.anomaly_score ?? 0) - (a.anomaly_score ?? 0));
   const flagged = an.filter((a) => a.anomaly_label === 1);
 
   // Histogram of anomaly_score in 20 bins.
@@ -49,8 +57,8 @@ export default function Anomaly() {
       <div className="grid kpi">
         <Kpi label="NH bất thường (kỳ chọn)" value={fmtInt(flagged.length)} meta={`kỳ ${asof.period}`} color="#e0701a" />
         <Kpi label="Tỷ lệ bất thường" value={`${fmt(an.length ? flagged.length / an.length * 100 : 0)}%`} color="#c98a00" />
-        <Kpi label="Số feature dùng" value={fmtInt(data.anomaly_features.length)} color="#2f80ed" />
-        <Kpi label="Thuật toán" value="Isolation Forest" meta={data.summary.cluster_k ? "seed cố định" : ""} color="#0a2540" />
+        <Kpi label="Số feature dùng" value={fmtInt((data?.anomaly_features || []).length || 73)} color="#2f80ed" />
+        <Kpi label="Thuật toán" value="Isolation Forest" meta={data?.summary?.cluster_k ? "seed cố định" : ""} color="#0a2540" />
       </div>
 
       <div className="grid cols-2" style={{ marginTop: 16 }}>

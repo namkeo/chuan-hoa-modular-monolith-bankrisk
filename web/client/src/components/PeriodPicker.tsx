@@ -72,14 +72,32 @@ export function useAsOf() {
       const exact = rows.filter((r) => r.period === sel);
       if (exact.length) return exact;
 
-      // 2. Try year prefix match (e.g. sel="2023" vs r.period="2023-12-31" or "2023Q4")
+      // 2. Map quarterly/monthly equivalences
+      let equiv = sel;
+      if (sel.includes("Q")) {
+        const [y, q] = sel.split("Q");
+        const m = q === "4" ? "12" : q === "3" ? "09" : q === "2" ? "06" : "03";
+        equiv = `${y}-${m}`;
+      } else if (sel.match(/^\d{4}-\d{2}$/)) {
+        const [y, m] = sel.split("-");
+        const q = m === "12" ? "4" : m === "09" || m === "08" || m === "07" ? "3" : m === "06" || m === "05" || m === "04" ? "2" : "1";
+        equiv = `${y}Q${q}`;
+      }
+      const matchEquiv = rows.filter((r) => r.period === equiv);
+      if (matchEquiv.length) return matchEquiv;
+
+      // 3. Try year prefix match -> pick the latest sub-period in that year
       const yearStr = sel.slice(0, 4);
       const yearMatches = rows.filter((r) => r.period && String(r.period).startsWith(yearStr));
-      if (yearMatches.length) return yearMatches;
+      if (yearMatches.length) {
+        const maxP = yearMatches.reduce((max, r) => ((r.period || "") > max ? (r.period || "") : max), "");
+        return yearMatches.filter((r) => r.period === maxP);
+      }
 
-      // 3. Fallback to rows matching latest or all
-      const latestMatches = rows.filter((r) => r.period === latest || (latest && String(r.period).startsWith(latest.slice(0, 4))));
-      return latestMatches.length ? latestMatches : rows;
+      // 4. Fallback to latest available period in rows
+      const allP = rows.map((r) => r.period || "").filter(Boolean);
+      const maxP = allP.reduce((max, p) => (p > max ? p : max), "");
+      return rows.filter((r) => r.period === maxP);
     },
   };
 }

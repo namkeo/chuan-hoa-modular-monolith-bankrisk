@@ -425,7 +425,35 @@ def load_all(folder: Path, use_cache: bool = True, progress=None) -> LoadResult:
     alias_lookup = build_alias_lookup(mapping_cfg)
     files = scan_data_files(folder)
     if not files:
-        LOG.warning("No data files found in %s", folder)
+        LOG.warning("No data files found in %s, checking MongoDB 'raw_panel_data'...", folder)
+        try:
+            import os
+            import pymongo
+            uri = os.getenv("MONGO_URI", "mongodb://admin:12345678@localhost:27018/")
+            client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=2000)
+            db = client[os.getenv("MONGO_DB", "bank_risk_db")]
+            docs = list(db["raw_panel_data"].find({}, {"_id": 0}))
+            if docs:
+                panel = pd.DataFrame(docs)
+                LOG.info("Successfully loaded %d panel records from MongoDB 'raw_panel_data'", len(panel))
+                unmapped = {}
+                if "period_ts" in panel.columns:
+                    panel["period_ts"] = pd.to_datetime(panel["period_ts"], errors="coerce")
+                if "metric_value" in panel.columns:
+                    panel["metric_value"] = pd.to_numeric(panel["metric_value"], errors="coerce")
+                wide = build_wide_tables(panel)
+                try:
+                    from .multi_frequency import build_combined_wide
+                    mf_cfg = load_config("model_config")
+                    if mf_cfg.get("multi_frequency", {}).get("enabled", True):
+                        combined = build_combined_wide(wide, mf_cfg)
+                        if combined is not None and not combined.empty:
+                            wide["combined"] = combined
+                except Exception as exc:
+                    LOG.warning("Could not build combined table: %s", exc)
+                return LoadResult(panel=panel, wide=wide, files=[], unmapped_labels=unmapped)
+        except Exception as exc:
+            LOG.warning("MongoDB raw_panel_data fallback failed: %s", exc)
         return LoadResult(panel=pd.DataFrame(columns=PANEL_COLUMNS))
 
     sig = _folder_signature(files)

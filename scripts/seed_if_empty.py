@@ -51,62 +51,68 @@ def seed_mongodb():
     db = client[db_name]
     valid_payload = db["api_payloads"].find_one({"empty": False})
     panel_count = db["raw_panel_data"].count_documents({})
+    scores_count = db["risk_scores"].count_documents({})
 
-    if valid_payload and panel_count > 0:
+    force_recompute = os.getenv("FORCE_RECOMPUTE") == "1" or "--force" in sys.argv
+    if not force_recompute and valid_payload and panel_count > 0 and scores_count > 0:
         doc_count = sum(db[c].count_documents({}) for c in db.list_collection_names())
         print(f"  [✓] MongoDB '{db_name}' already contains {doc_count} valid documents. (Skipping import)")
     else:
-        print(f"  [+] MongoDB '{db_name}' is empty or incomplete. Importing JSON seed files...")
-        init_dir = PROJECT_ROOT / "mongo_data" / "init_json" / "bank_risk_db"
-        if init_dir.exists():
-            for fpath in sorted(init_dir.glob("*.json")):
-                cname = fpath.stem
-                with open(fpath, "r", encoding="utf-8") as f:
-                    docs = json_util.loads(f.read())
-                    if docs:
-                        if isinstance(docs, dict):
-                            docs = [docs]
-                        db[cname].drop()
-                        for i in range(0, len(docs), BATCH_SIZE):
-                            chunk = docs[i : i + BATCH_SIZE]
-                            db[cname].insert_many(chunk)
-                        print(f"      └─ Imported {len(docs)} documents into '{cname}'")
-        print(f"  [✓] MongoDB '{db_name}' seeding complete!")
+        print(f"  [+] MongoDB '{db_name}' is empty or incomplete. Running full dynamic pipeline calculation from Excel workbooks...")
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT))
+            sys.path.insert(0, str(PROJECT_ROOT / "bank_risk_service"))
+            from scripts.import_to_mongodb import import_all_to_mongodb
+            import_all_to_mongodb()
+            print(f"  [✓] MongoDB '{db_name}' dynamic calculation complete!")
+        except Exception as err:
+            print(f"  [!] Automatic dynamic calculation failed: {err}")
 
     # 2. Check credit_scoring_db
     scoring_db_name = "credit_scoring_db"
     scoring_db = client[scoring_db_name]
-    scoring_count = sum(scoring_db[c].count_documents({}) for c in scoring_db.list_collection_names())
+    kq_count = scoring_db["KetQuaTinhDiem"].count_documents({})
 
-    if scoring_count > 0:
-        print(f"  [✓] MongoDB '{scoring_db_name}' already contains {scoring_count} documents. (Skipping import)")
+    if kq_count > 0:
+        print(f"  [✓] MongoDB '{scoring_db_name}' contains {kq_count} KetQuaTinhDiem documents. (Skipping recalculation)")
     else:
-        print(f"  [+] MongoDB '{scoring_db_name}' is empty. Importing JSON seed files...")
-        init_dir = PROJECT_ROOT / "mongo_data" / "init_json" / "credit_scoring_db"
-        if init_dir.exists():
-            for fpath in sorted(init_dir.glob("*.json")):
-                cname = fpath.stem
-                with open(fpath, "r", encoding="utf-8") as f:
-                    docs = json_util.loads(f.read())
-                    if docs:
-                        if isinstance(docs, dict):
-                            docs = [docs]
-                        scoring_db[cname].drop()
-                        for i in range(0, len(docs), BATCH_SIZE):
-                            chunk = docs[i : i + BATCH_SIZE]
-                            scoring_db[cname].insert_many(chunk)
-                        print(f"      └─ Imported {len(docs)} documents into '{cname}'")
-        print(f"  [✓] Credit scoring MongoDB seeding complete!")
+        print(f"  [+] MongoDB '{scoring_db_name}' is missing ranking results. Running dynamic calculation from MinIO / Excel files...")
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT / "xep_hang_service"))
+            from xep_hang_service.scripts.load_all_31_excel_rankings import process_all_rankings
+            import asyncio
+            asyncio.run(process_all_rankings())
+            print(f"  [✓] Credit scoring MongoDB dynamic calculation complete!")
+        except Exception as err:
+            print(f"  [!] Dynamic credit scoring calculation failed, falling back to JSON seed: {err}")
+            init_dir = PROJECT_ROOT / "mongo_data" / "init_json" / "credit_scoring_db"
+            if init_dir.exists():
+                for fpath in sorted(init_dir.glob("*.json")):
+                    cname = fpath.stem
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        docs = json_util.loads(f.read())
+                        if docs:
+                            if isinstance(docs, dict):
+                                docs = [docs]
+                            scoring_db[cname].drop()
+                            for i in range(0, len(docs), BATCH_SIZE):
+                                chunk = docs[i : i + BATCH_SIZE]
+                                scoring_db[cname].insert_many(chunk)
+                            print(f"      └─ Imported {len(docs)} documents into '{cname}'")
+            print(f"  [✓] Credit scoring MongoDB JSON seeding complete!")
 
 
 def seed_minio():
     print("\n[2/2] Checking MinIO Object Storage status...")
-    source_minio = PROJECT_ROOT / "minio_data" / "bankrisk-files"
-    if source_minio.exists():
-        files = list(source_minio.glob("*"))
-        print(f"  [✓] MinIO host directory contains {len(files)} files mounted directly to container.")
-    else:
-        print("  [!] Source minio_data directory not found.")
+    bank_risk_data = PROJECT_ROOT / "data" / "bank_risk_data"
+    xep_hang_data = PROJECT_ROOT / "data" / "xep_hang_data"
+
+    if bank_risk_data.exists():
+        files = list(bank_risk_data.glob("*"))
+        print(f"  [✓] Bucket 'bankrisk-files': {len(files)} files mounted directly from {bank_risk_data.name}.")
+    if xep_hang_data.exists():
+        files = list(xep_hang_data.glob("*"))
+        print(f"  [✓] Bucket 'xep_hang_tctd': {len(files)} files mounted directly from {xep_hang_data.name}.")
 
 
 if __name__ == "__main__":

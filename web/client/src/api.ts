@@ -78,7 +78,8 @@ export interface FreqData {
 
 export const api = {
   meta: () => http.get<Meta>("/meta").then((r) => r.data),
-  data: (freq: string) => http.get<FreqData>(`/data/${freq}`).then((r) => r.data),
+  data: (freq: string) =>
+    http.get<FreqData>(`/data/${freq}`).then((r) => r.data),
   filterRuleFindings: (params: Record<string, any>) =>
     http.get("/rule-findings/filter", { params }).then((r) => r.data),
   run: (freq: string, fresh = false) =>

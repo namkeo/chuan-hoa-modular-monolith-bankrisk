@@ -6,9 +6,22 @@ import { useStore } from "../store";
 
 const METRIC_LABEL: Record<string, string> = {
   npl_ratio: "Tỷ lệ nợ xấu (NPL)", ldr: "LDR", car_solo: "CAR riêng lẻ",
-  roa: "ROA", liquidity_reserve_ratio: "Dự trữ thanh khoản",
-  group2_ratio: "Nợ nhóm 2", st_funding_for_mlt_loans: "Vốn NH cho vay TDH",
+  roa: "ROA", roe: "ROE", cir: "CIR", nim: "NIM",
+  liquidity_reserve_ratio: "Dự trữ thanh khoản",
+  group2_ratio: "Nợ nhóm 2", group5_ratio: "Nợ nhóm 5",
+  st_funding_for_mlt_loans: "Vốn NH cho vay TDH",
   credit_growth_yoy: "Tăng trưởng tín dụng",
+  asset_growth_yoy: "Tăng trưởng tài sản",
+  casa: "Tỷ lệ CASA",
+  provision_to_loans: "Dự phòng / Dư nợ",
+  accrued_interest_to_loans: "Lãi dự thu / Dư nợ",
+  wholesale_funding_share: "Tỷ lệ vốn bán buôn",
+  interbank_assets_to_liabilities: "Tỷ lệ tài sản/nợ liên ngân hàng",
+  equity_to_assets: "Vốn chủ sở hữu / Tổng tài sản",
+  customer_deposits_and_valuable_papers: "Tiền gửi & GTCG",
+  customer_loans: "Dư nợ cho vay KH",
+  provisions: "Dự phòng rủi ro",
+  accrued_interest: "Lãi và phí dự thu",
 };
 
 export default function TimeSeries() {
@@ -20,10 +33,19 @@ export default function TimeSeries() {
   const banks = data.banks || Object.keys(data.series?.data || {});
   const curBank = bank || banks[0] || "";
   const series = data.series || { metrics: [], data: {} };
-  const metrics = (series.metrics || []).filter((m) => METRIC_LABEL[m]);
-  const curMetric = metrics.includes(metric) ? metric : (metrics[0] || "npl_ratio");
   const bd = (series.data || {})[curBank];
-  const chartData = bd ? (bd.periods || []).map((p: string, i: number) => ({ period: p, value: bd[curMetric]?.[i] ?? null })) : [];
+  const allAvailableMetrics = series.metrics?.length
+    ? series.metrics
+    : Object.keys(bd || {}).filter((k) => k !== "periods");
+  const metrics = allAvailableMetrics.sort();
+  const curMetric = metrics.includes(metric) ? metric : (metrics[0] || "npl_ratio");
+  const rawChartData = bd ? (bd.periods || []).map((p: string, i: number) => ({ period: p, value: bd[curMetric]?.[i] ?? null })) : [];
+  const hasMonthlyPoints = rawChartData.some((d: any) => d.period.match(/^\d{4}-\d{2}$/) && d.value !== null);
+  const chartData = rawChartData.filter((d: any) => {
+    if (d.value === null || d.value === undefined) return false;
+    if (hasMonthlyPoints) return d.period.match(/^\d{4}-\d{2}$/);
+    return true;
+  });
 
   const hrp = data.high_risk_periods || [];
   const stress = data.systemic_stress || [];
@@ -77,8 +99,7 @@ export default function TimeSeries() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="period" fontSize={11} />
                 <YAxis fontSize={11} />
-                <Tooltip formatter={(v: any) => fmt(v, 3)} />
-                <Area type="monotone" dataKey="systemic_stress_index" stroke="#c62828" fill="url(#stress)" strokeWidth={2} />
+                <Area type="monotone" dataKey="systemic_stress_pct" stroke="#c62828" fill="url(#stress)" strokeWidth={2} name="Chỉ số căng thẳng (%)" />
               </AreaChart>
             </ResponsiveContainer>
           ) : <Empty />}

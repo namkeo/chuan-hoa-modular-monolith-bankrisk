@@ -28,8 +28,16 @@ export default function LiquidityRisk() {
   // Cờ đỏ thanh khoản mở rộng — giữ toàn bộ dòng thời gian (sự kiện có mốc kỳ).
   const liqFlags = data.validation.filter((v) => LIQ_FLAG_CATS.includes(v.category));
 
-  // Xếp hạng: điểm rủi ro thanh khoản của kỳ đang chọn, CHỈ đơn vị được đánh giá.
-  const periodScores = asof.filter(data.scores);
+  // Xếp hạng: điểm rủi ro thanh khoản của kỳ đang chọn, CHỈ đơn vị được đánh giá (deduplicate theo bank_id).
+  const rawScores = asof.filter(data?.scores || []);
+  const latestByBank = new Map<string, any>();
+  rawScores.forEach((r: any) => {
+    if (!r.bank_id) return;
+    if (!latestByBank.has(r.bank_id) || (r.period || "") > (latestByBank.get(r.bank_id).period || "")) {
+      latestByBank.set(r.bank_id, r);
+    }
+  });
+  const periodScores = Array.from(latestByBank.values());
   const ranking = periodScores
     .filter((r) => r.liquidity_risk_score != null)
     .sort((a, b) => (b.liquidity_risk_score || 0) - (a.liquidity_risk_score || 0));

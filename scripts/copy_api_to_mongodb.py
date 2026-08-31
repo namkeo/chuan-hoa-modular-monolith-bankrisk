@@ -20,10 +20,12 @@ from pymongo import MongoClient
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT / "bank_risk_service") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "bank_risk_service"))
 
 from src.utils import OUTPUTS_DIR
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:12345678@localhost:27017/")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:12345678@localhost:27018/")
 DB_NAME = "bank_risk_db"
 API_DIR = OUTPUTS_DIR / "api"
 
@@ -45,12 +47,24 @@ def copy_api_files_to_mongodb():
     db = client[DB_NAME]
     print(f"Target Database: '{DB_NAME}'")
 
-    if not API_DIR.exists():
-        print(f"Error: API directory '{API_DIR}' does not exist.")
+    target_api_dir = API_DIR
+    if not target_api_dir.exists() or not list(target_api_dir.glob("*.json")):
+        alt_paths = [
+            PROJECT_ROOT / "outputs" / "api",
+            PROJECT_ROOT.parent / "Data 010826" / "[SBV] Tài liệu khảo sát" / "dataset" / "source_code" / "outputs" / "api",
+            Path(r"d:\Văn bản KTNN\Rủi ro vốn\Data 010826\[SBV] Tài liệu khảo sát\dataset\source_code\outputs\api"),
+        ]
+        for p in alt_paths:
+            if p.exists() and list(p.glob("*.json")):
+                target_api_dir = p
+                break
+
+    if not target_api_dir.exists():
+        print(f"Error: API directory '{target_api_dir}' does not exist.")
         return
 
-    json_files = sorted(API_DIR.glob("*.json"))
-    print(f"Found {len(json_files)} JSON file(s) in '{API_DIR}':")
+    json_files = sorted(target_api_dir.glob("*.json"))
+    print(f"Found {len(json_files)} JSON file(s) in '{target_api_dir}':")
     for f in json_files:
         print(f"  - {f.name} ({f.stat().st_size / 1024:.1f} KB)")
 

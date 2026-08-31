@@ -17,8 +17,16 @@ export default function FraudFailure() {
   const asof = useAsOf();
   if (!data || data.empty) return null;
 
-  // Điểm proxy của kỳ đang chọn; CHỈ đơn vị được đánh giá (đủ dữ liệu/lịch sử).
-  const periodScores = asof.filter(data.scores);
+  // Điểm proxy của kỳ đang chọn; CHỈ đơn vị được đánh giá (deduplicate theo bank_id).
+  const rawScores = asof.filter(data?.scores || []);
+  const latestByBank = new Map<string, any>();
+  rawScores.forEach((r: any) => {
+    if (!r.bank_id) return;
+    if (!latestByBank.has(r.bank_id) || (r.period || "") > (latestByBank.get(r.bank_id).period || "")) {
+      latestByBank.set(r.bank_id, r);
+    }
+  });
+  const periodScores = Array.from(latestByBank.values());
   const fraud = periodScores
     .filter((r) => r.fraud_risk_proxy_score != null)
     .sort((a, b) => (b.fraud_risk_proxy_score || 0) - (a.fraud_risk_proxy_score || 0)).slice(0, 15);

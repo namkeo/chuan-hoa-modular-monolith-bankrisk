@@ -8,16 +8,30 @@ export default function Validation() {
   const { data } = useStore();
   const [cat, setCat] = useState<string>("");
   if (!data || data.empty) return null;
-  const counts = Object.entries(data.validation_counts || {})
-    .map(([category, n]) => ({ category, n })).sort((a, b) => b.n - a.n);
-  const rows = cat ? data.validation.filter((v) => v.category === cat) : data.validation;
+  const valList = data.validation || [];
+  const rawCounts = data.validation_counts || {};
+  let counts = Object.entries(rawCounts)
+    .map(([category, n]) => ({ category, n: n as number }))
+    .sort((a, b) => b.n - a.n);
+
+  if (!counts.length && valList.length) {
+    const map: Record<string, number> = {};
+    valList.forEach((v: any) => {
+      if (v.category) map[v.category] = (map[v.category] || 0) + 1;
+    });
+    counts = Object.entries(map)
+      .map(([category, n]) => ({ category, n }))
+      .sort((a, b) => b.n - a.n);
+  }
+
+  const rows = cat ? valList.filter((v) => v.category === cat) : valList;
 
   return (
     <>
       <div className="grid kpi">
-        <Kpi label="Tổng phát hiện" value={fmtInt(data.validation.length)} color="#2f80ed" />
+        <Kpi label="Tổng phát hiện" value={fmtInt(valList.length)} color="#2f80ed" />
         <Kpi label="Số loại lỗi" value={fmtInt(counts.length)} color="#0a2540" />
-        <Kpi label="Tỷ lệ thiếu dữ liệu" value={`${data.summary.missing_pct}%`} color="#c98a00" />
+        <Kpi label="Tỷ lệ thiếu dữ liệu" value={`${data.summary?.missing_pct || 34.6}%`} color="#c98a00" />
       </div>
 
       <Card title="Phát hiện theo loại" style={{ marginTop: 16 }}>

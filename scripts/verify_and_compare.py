@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import os
 import json
 import sys
 import time
@@ -28,7 +29,7 @@ from src.api_export import _clean, _records
 from src.pipeline import available_frequencies, run_pipeline
 from src.utils import DATA_ROOT, LOG, load_config
 
-MONGO_URI = "mongodb://admin:12345678@localhost:27017/"
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:12345678@localhost:27018/")
 DB_NAME = "bank_risk_db"
 
 
@@ -52,7 +53,9 @@ def run_verification_and_comparison():
     # -------------------------------------------------------------------------
     # 1. Run Dynamic Calculation Pipeline for Frequencies
     # -------------------------------------------------------------------------
-    target_data_dir = PROJECT_ROOT.parent / "data_all"
+    target_data_dir = PROJECT_ROOT / "mongo_data" / "raw_input"
+    if not target_data_dir.exists():
+        target_data_dir = PROJECT_ROOT.parent / "mongo_data" / "raw_input"
     if not target_data_dir.exists():
         target_data_dir = DATA_ROOT
         

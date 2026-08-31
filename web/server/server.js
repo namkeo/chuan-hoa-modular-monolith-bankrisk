@@ -66,8 +66,9 @@ const BE_URL = process.env.BE_URL || process.env.XEP_HANG_URL || "http://127.0.0
 // Fetch payload from FastAPI server (which reads directly from MongoDB)
 async function getFreqPayloadFromFastAPI(freq) {
   try {
-    console.log(`[*] Proxying FE request /api/data/${freq} -> FastAPI bank_risk_service (${FASTAPI_URL}/api/data/${freq})`);
-    const res = await fetch(`${FASTAPI_URL}/api/data/${freq}`, { signal: AbortSignal.timeout(3000) });
+    const url = `${FASTAPI_URL}/api/data/${freq}`;
+    console.log(`[*] Proxying FE request /api/data/${freq} -> FastAPI bank_risk_service (${url})`);
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       console.log(`[+] Successfully fetched data for '${freq}' from FastAPI bank_risk_service!`);
       return await res.json();

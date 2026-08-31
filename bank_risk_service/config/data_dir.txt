@@ -1,1 +1,1 @@
-../data_all
+../data/bank_risk_data

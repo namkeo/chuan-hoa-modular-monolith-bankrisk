@@ -8,8 +8,16 @@ export default function RiskDashboard() {
   const { data } = useStore();
   const asof = useAsOf();
   if (!data || data.empty) return null;
-  // As-of ranking for the selected period (falls back to latest).
-  const ranking = asof.filter(data.scores).slice()
+  // As-of ranking for the selected period (deduplicate by bank_id to take latest per bank).
+  const rawRanking = asof.filter(data?.scores || []);
+  const latestByBank = new Map<string, any>();
+  rawRanking.forEach((r: any) => {
+    if (!r.bank_id) return;
+    if (!latestByBank.has(r.bank_id) || (r.period || "") > (latestByBank.get(r.bank_id).period || "")) {
+      latestByBank.set(r.bank_id, r);
+    }
+  });
+  const ranking = Array.from(latestByBank.values())
     .sort((a, b) => (b.final_risk_score || 0) - (a.final_risk_score || 0));
   const lv: Record<string, number> = {};
   ranking.forEach((r) => { lv[r.risk_level] = (lv[r.risk_level] || 0) + 1; });
@@ -33,7 +41,10 @@ export default function RiskDashboard() {
     "Gian lận (proxy)": "#e0701a", "Đổ vỡ (proxy)": "#c62828",
   };
 
-  const hm = data.heatmap;
+  const hm = data?.heatmap;
+
+  const bankRanking = ranking.filter((r) => !r.bank_id?.startsWith("CTTC_"));
+  const top12Banks = bankRanking.length >= 12 ? bankRanking.slice(0, 12) : ranking.slice(0, 12);
 
   return (
     <>
@@ -46,16 +57,16 @@ export default function RiskDashboard() {
       </div>
 
       <Card title="Heatmap rủi ro: ngân hàng × kỳ" sub="final_risk_score 0–100" className="" >
-        {hm.banks.length > 0 ? (
+        {hm?.banks && hm.banks.length > 0 ? (
           <>
             <div style={{ overflowX: "auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: `140px repeat(${hm.periods.length}, minmax(34px, 1fr))`, gap: 2, minWidth: 600 }}>
+              <div style={{ display: "grid", gridTemplateColumns: `140px repeat(${hm.periods?.length || 0}, minmax(34px, 1fr))`, gap: 2, minWidth: 600 }}>
                 <div />
-                {hm.periods.map((p) => (
+                {(hm.periods || []).map((p) => (
                   <div key={p} style={{ fontSize: 10, color: "#5b6677", textAlign: "center", paddingBottom: 4, transform: "rotate(0deg)" }}>{p}</div>
                 ))}
                 {hm.banks.map((b, ri) => (
-                  <RowCells key={b} bank={b} row={hm.z[ri]} />
+                  <RowCells key={b} bank={b} row={hm.z?.[ri] || []} />
                 ))}
               </div>
             </div>
@@ -79,15 +90,15 @@ export default function RiskDashboard() {
           </ResponsiveContainer>
         </Card>
 
-        <Card title="Top 12 lĩnh vực điểm cao nhất" sub="rule_violation + anomaly + trend">
+        <Card title="Top 12 ngân hàng điểm rủi ro cao nhất" sub="rule_violation + anomaly + trend">
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={ranking.slice(0, 12)} layout="vertical" margin={{ left: 30, right: 16 }}>
+            <BarChart data={top12Banks} layout="vertical" margin={{ left: 30, right: 16 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} />
               <XAxis type="number" domain={[0, 100]} fontSize={11} />
               <YAxis type="category" dataKey="bank_id" width={90} fontSize={10} />
               <Tooltip formatter={(v: any) => fmt(v)} />
               <Bar dataKey="final_risk_score" radius={[0, 4, 4, 0]}>
-                {ranking.slice(0, 12).map((d, i) => <Cell key={i} fill={heatColor(d.final_risk_score)} />)}
+                {top12Banks.map((d, i) => <Cell key={i} fill={heatColor(d.final_risk_score)} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

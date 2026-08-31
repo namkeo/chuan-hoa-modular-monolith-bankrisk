@@ -43,7 +43,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setData(d);
       setPeriod(d?.periods?.latest || "");
     } catch (e: any) {
-      // Not exported yet -> trigger a run once if allowed.
       if (e?.response?.status === 404 && allowAutoRun) {
         setRunning(true);
         try {
@@ -73,18 +72,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const freqs = (m && Array.isArray(m.frequencies) && m.frequencies.length > 0)
         ? m.frequencies
         : ["combined", "monthly", "quarterly", "yearly", "daily"];
-      // Default to the integrated multi-frequency view when available.
       const initial = freqs.includes("combined") ? "combined"
         : freqs.includes("monthly") ? "monthly"
         : freqs[0] || "quarterly";
       setFreqState(initial);
-      loadData(initial);
+      loadData(initial, true);
     }).catch((e) => { setError(String(e)); setLoading(false); });
   }, [loadData]);
 
   const setFreq = useCallback((f: string) => {
     setFreqState(f);
-    loadData(f);
+    loadData(f, true);
   }, [loadData]);
 
   const refresh = useCallback(async (fresh = false) => {
@@ -97,12 +95,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setData(payload);
         setPeriod(payload?.periods?.latest || "");
       } else {
-        await loadData(freq);
+        await loadData(freq, true);
       }
       showToast("Đã cập nhật kết quả phân tích.");
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Chạy pipeline thất bại", true);
-      await loadData(freq);
+      await loadData(freq, true);
     } finally {
       setRunning(false);
     }

@@ -27,12 +27,32 @@ from src.api_export import (
     build_performance,
     build_pdf_status,
     build_payload,
+    export_frequency,
     _clean
 )
 from src.utils import DATA_ROOT, LOG, load_config
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:12345678@localhost:27017/")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:12345678@localhost:27018/")
 DB_NAME = "bank_risk_db"
+
+
+def get_mongo_client():
+    uris = [
+        os.getenv("MONGO_URI"),
+        "mongodb://admin:12345678@localhost:27018/",
+        "mongodb://admin:12345678@localhost:27017/",
+    ]
+    for u in uris:
+        if not u:
+            continue
+        try:
+            c = MongoClient(u, serverSelectionTimeoutMS=2000)
+            c.admin.command("ping")
+            print(f"Connected to MongoDB at {u}")
+            return c
+        except Exception:
+            continue
+    raise RuntimeError("Could not connect to MongoDB on port 27018 or 27017")
 
 
 def sanitize_dict_or_list(obj):
@@ -47,8 +67,7 @@ def sanitize_dict_or_list(obj):
 
 def import_all_to_mongodb():
     start_time = time.time()
-    print(f"Connecting to MongoDB at {MONGO_URI}...")
-    client = MongoClient(MONGO_URI)
+    client = get_mongo_client()
     db = client[DB_NAME]
     
     print(f"Target Database: '{DB_NAME}'")
@@ -190,6 +209,7 @@ def import_all_to_mongodb():
 
     for freq in frequencies:
         print(f"\nProcessing frequency: '{freq}'...")
+        export_frequency(freq, use_cache=True)
         payload = build_payload(freq, use_cache=True)
         if payload.get("empty"):
             print(f"  [!] Frequency '{freq}' payload is empty. Skipping...")

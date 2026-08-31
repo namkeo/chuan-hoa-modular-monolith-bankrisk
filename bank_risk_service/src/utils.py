@@ -34,7 +34,10 @@ CHARTS_DIR = OUTPUTS_DIR / "charts"
 EXPORTS_DIR = OUTPUTS_DIR / "exports"
 
 for _d in (RAW_DIR, PROCESSED_DIR, FEEDBACK_DIR, MODELS_DIR, REPORTS_DIR, CHARTS_DIR, EXPORTS_DIR):
-    _d.mkdir(parents=True, exist_ok=True)
+    try:
+        _d.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -73,11 +76,12 @@ def resolve_data_dir() -> Path:
         except OSError:
             pass
 
-    # 1. Search sibling data_all / data folders first (which contain all bank files)
+    # 1. Search data/bank_risk_data folders first (which contain all bank files)
     candidates = [
-        PROJECT_ROOT.parent / "data_all",
+        PROJECT_ROOT / "data" / "bank_risk_data",
+        PROJECT_ROOT.parent / "data" / "bank_risk_data",
         PROJECT_ROOT.parent / "data",
-        PROJECT_ROOT.with_name("data_all"),
+        PROJECT_ROOT / "data",
     ]
     for c in candidates:
         if c.exists() and _has_data_files(c):

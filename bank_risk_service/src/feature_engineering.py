@@ -235,7 +235,7 @@ def add_trend_features(df: pd.DataFrame, metrics: list[str], window: int = 4) ->
         out[f"{m}__accel"] = g[f"{m}__qoq"].transform(lambda x: x.diff())
         cummax = g[m].transform(lambda x: x.cummax())
         out[f"{m}__drawdown"] = (s - cummax) / cummax.replace(0, np.nan) * 100
-    return out
+    return out.copy()
 
 
 def add_systemic_features(df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
@@ -250,7 +250,7 @@ def add_systemic_features(df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
         std = grp.transform("std").replace(0, np.nan)
         out[f"{m}__dev_sys_median"] = out[m] - median
         out[f"{m}__z_cross"] = (out[m] - median) / std
-    return out
+    return out.copy()
 
 
 # Metrics whose worsening raises systemic stress, with sign (+1 = higher worse).

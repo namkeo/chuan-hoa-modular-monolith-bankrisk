@@ -20,10 +20,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("load_31_rankings")
 
 def resolve_excel_folder() -> str:
-    peer_dir = BE_ROOT.parent / "minio_data" / "xep_hang_tctd"
-    if peer_dir.exists() and list(peer_dir.glob("XH_TCTD_*.xlsx")):
-        return str(peer_dir)
-    return r"D:\Văn bản KTNN\Rủi ro vốn\[SBV] Tài liệu khảo sát\dataset\source_code\minio_data\xep_hang_tctd"
+    candidates = [
+        BE_ROOT.parent / "data" / "xep_hang_data",
+        BE_ROOT / "data" / "xep_hang_data",
+        BE_ROOT.parent / "minio_data" / "xep_hang_tctd",
+    ]
+    for c in candidates:
+        if c.exists() and list(c.glob("XH_TCTD_*.xlsx")):
+            return str(c)
+    return str(BE_ROOT.parent / "data" / "xep_hang_data")
 
 EXCEL_FOLDER = resolve_excel_folder()
 
