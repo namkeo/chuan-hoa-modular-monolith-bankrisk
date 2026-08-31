@@ -7,17 +7,20 @@ echo     KHOI DONG HE THONG - CHECK DU LIEU MONGO/MINIO AND DOCKER BUILD
 echo =======================================================================
 
 echo.
-echo [1/3] Khoi chay MongoDB va MinIO...
-docker compose up -d mongodb minio
+echo [1/3] Khoi chay tat ca dich vu Docker...
+docker compose up -d
 if %ERRORLEVEL% NEQ 0 (
-    echo [!] Loi khi khoi chay mongodb va minio! Vui long dam bao Docker Desktop da bat va WSL2 khong bi loi.
+    echo [!] Loi khi khoi chay Docker Desktop! Vui long dam bao Docker Desktop da duoc bat.
     pause
     exit /b %ERRORLEVEL%
 )
 
 echo.
 echo [2/3] Kiem tra va tu dong import du lieu neu chua co...
-python scripts/seed_if_empty.py
+docker compose exec -T bank_risk_service python /app/scripts/seed_if_empty.py
+if %ERRORLEVEL% NEQ 0 (
+    python scripts/seed_if_empty.py
+)
 
 echo.
 echo [3/3] Khoi chay toan bo he thong web va cac dich vu...

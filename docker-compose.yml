@@ -59,6 +59,7 @@ services:
       - ./data:/app/bank_risk_service/data
       - ./outputs:/app/outputs
       - ./outputs:/app/bank_risk_service/outputs
+      - ./scripts:/app/scripts
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
