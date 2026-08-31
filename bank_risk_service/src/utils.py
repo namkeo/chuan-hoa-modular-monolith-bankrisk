@@ -22,25 +22,20 @@ import yaml
 # artifacts (cache, models, outputs) are written here.
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SERVICE_ROOT.parent
-CONFIG_DIR = (
-    (SERVICE_ROOT / "config")
-    if (SERVICE_ROOT / "config").exists()
-    else (PROJECT_ROOT / "config")
-    if (PROJECT_ROOT / "config").exists()
-    else (PROJECT_ROOT / "web" / "config")
-)
-DATA_DIR = PROJECT_ROOT / "data"
+CONFIG_DIR = SERVICE_ROOT / "config"
+DATA_DIR = SERVICE_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 FEEDBACK_DIR = DATA_DIR / "feedback"
-MODELS_DIR = PROJECT_ROOT / "models"
-OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+MODELS_DIR = SERVICE_ROOT / "models"
+OUTPUTS_DIR = SERVICE_ROOT / "outputs"
 REPORTS_DIR = OUTPUTS_DIR / "reports"
 CHARTS_DIR = OUTPUTS_DIR / "charts"
 EXPORTS_DIR = OUTPUTS_DIR / "exports"
 
 for _d in (RAW_DIR, PROCESSED_DIR, FEEDBACK_DIR, MODELS_DIR, REPORTS_DIR, CHARTS_DIR, EXPORTS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
 
 # --------------------------------------------------------------------------- #
 # DATA_ROOT = where the BANK INPUT files (.xlsx/.csv + regulatory PDFs) live.
