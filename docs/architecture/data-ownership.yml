@@ -1,0 +1,188 @@
+# =============================================================================
+# BẢN ĐỒ QUYỀN SỞ HỮU DỮ LIỆU  —  bước 1/6 lộ trình Modular Monolith
+#
+# Mỗi collection MongoDB thuộc về ĐÚNG MỘT module. Chỉ mã nguồn của module đó
+# được phép đọc/ghi nó; mọi thành phần khác phải đi qua API công khai của module.
+#
+# Tệp này là NGUỒN SỰ THẬT, đọc được bằng máy. Kiểm tra bằng:
+#     python scripts/audit/check_data_ownership.py
+#
+# Chưa gắn vào CI — việc gắn thuộc bước 6 của lộ trình.
+# =============================================================================
+version: 1
+updated: "2026-09-25"
+
+modules:
+
+  giam_sat_rui_ro:
+    ten: "Giám sát rủi ro TCTD"
+    database: bank_risk_db
+    # Cửa công khai — thứ DUY NHẤT bên ngoài được import:
+    public_api: bank_risk_service/api.py
+    code_roots:
+      - bank_risk_service/
+    owns:
+      # --- nguồn đã chuẩn hoá từ workbook Excel ---
+      - raw_panel_data
+      - raw_files
+      - unmapped_labels
+      # --- cấu hình pháp lý ---
+      - regulatory_rules_config
+      # --- kết quả phân tích, dạng bản ghi ---
+      - risk_scores
+      - bank_rankings
+      - rule_findings
+      - anomalies
+      - clusters
+      - ews_indicators
+      - stress_test_results
+      - high_risk_periods
+      - systemic_stress
+      - validation_findings
+      - time_series_data
+      - frequency_summaries
+      # --- kết quả phân tích, bản do api_export ghi lại ---
+      - computed_rule_findings
+      - computed_anomalies
+      - computed_clusters
+      - computed_ews_indicators
+      - computed_stress_test_results
+      # --- payload phục vụ API ---
+      - api_payloads
+      - api_meta
+      - api_performance
+      - api_pdf_status
+      # --- phụ trợ / vận hành ---
+      - pipeline_meta
+      - performance_logs
+      - performance_suggestions
+      - user_feedback
+      - pdf_file_status
+      - pdf_rule_candidates
+
+  xep_hang_tctd:
+    ten: "Xếp hạng TCTD theo CAMELS"
+    database: credit_scoring_db
+    # Cửa công khai — thứ DUY NHẤT bên ngoài được import:
+    public_api: xep_hang_service/app/api.py
+    code_roots:
+      - xep_hang_service/app/
+    owns:
+      - BoTieuChi
+      - NhomTieuChi
+      - ChiTieu
+      - DoiTuongDanhGia
+      - DuLieuTinhDiem
+      - DuLieuSaiPham
+      - KetQuaTinhDiem
+
+# Vùng KHÔNG sở hữu dữ liệu. Mọi truy cập MongoDB từ đây là vi phạm ranh giới;
+# đúng cách là gọi API công khai của module sở hữu.
+non_owners:
+  web/: "BFF — chỉ được gọi HTTP"
+  scripts/: "script vận hành cấp gốc — phải gọi use case của module"
+  xep_hang_service/scripts/: "script của module B nhưng nằm ngoài code_roots"
+
+# -----------------------------------------------------------------------------
+# NỢ KỸ THUẬT ĐÃ BIẾT
+# Danh sách nền để "đốt dần": mỗi dòng là một vi phạm được tạm chấp nhận, nên
+# giảm đi chứ không được tăng thêm. Bộ kiểm tra chỉ báo lỗi với vi phạm MỚI.
+# -----------------------------------------------------------------------------
+accepted_violations:
+
+  - id: V1
+    loai: web_doc_thang_database
+    muc_do: cao
+    xu_ly_o_buoc: 2
+    mo_ta: >
+      web/server/server.js bỏ qua API của cả hai module để đọc thẳng collection.
+      Đổi tên collection là web gãy dù không ai sửa mã của web.
+    diem_ma:
+      - "web/server/server.js:92   -> api_payloads      (module giam_sat_rui_ro)"
+      - "web/server/server.js:133  -> KetQuaTinhDiem    (module xep_hang_tctd)"
+      - "web/server/server.js:188  -> KetQuaTinhDiem    (module xep_hang_tctd)"
+      - "web/server/server.js:248  -> DoiTuongDanhGia   (module xep_hang_tctd)"
+
+  - id: V2
+    loai: module_khong_tu_ghi_duoc_du_lieu_cua_minh
+    muc_do: cao
+    xu_ly_o_buoc: 3
+    mo_ta: >
+      22 collection của giam_sat_rui_ro chỉ được ghi bởi script cấp gốc, không
+      phải bởi mã của module. Module đọc dữ liệu mà nó không tự sản xuất được,
+      nên không thật sự "sở hữu" dữ liệu đó.
+    diem_ma:
+      - "scripts/import_to_mongodb.py       -> ghi 21 collection"
+      - "scripts/copy_api_to_mongodb.py     -> ghi 16 collection (không nằm trong luồng khởi động)"
+      - "scripts/import_baseline_to_mongodb.py -> ghi 5 collection"
+      - "scripts/verify_and_compare.py      -> drop + ghi lại 5 collection computed_* dù tên là 'verify'"
+
+  - id: V3
+    loai: hai_ban_the_hien_cung_mot_du_lieu
+    muc_do: cao
+    xu_ly_o_buoc: 3
+    mo_ta: >
+      Năm cặp collection giữ cùng một dữ liệu logic với hai người ghi khác nhau.
+      Bên đọc ưu tiên bản computed_*, nên bản đầy đủ bị che khuất. Đây chính là
+      chỗ phát sinh lỗi cắt 5.000 dòng trong api_export.py.
+    cap_trung_lap:
+      - "rule_findings        <-> computed_rule_findings"
+      - "anomalies            <-> computed_anomalies"
+      - "clusters             <-> computed_clusters"
+      - "ews_indicators       <-> computed_ews_indicators"
+      - "stress_test_results  <-> computed_stress_test_results"
+
+  - id: V4
+    loai: collection_mo_coi
+    muc_do: thap
+    xu_ly_o_buoc: 5
+    mo_ta: >
+      Bảy collection được ghi nhưng KHÔNG nơi nào đọc. Mỗi cái đã bị thay thế
+      bởi một payload tổng hợp. Nên xoá khi chia lại module.
+    collections:
+      - "frequency_summaries     (bị thay bởi api_payloads.summary)"
+      - "pipeline_meta           (bị thay bởi api_meta)"
+      - "performance_logs        (bị thay bởi api_performance)"
+      - "performance_suggestions (bị thay bởi api_performance)"
+      - "user_feedback           (bị thay bởi api_performance)"
+      - "pdf_file_status         (bị thay bởi api_pdf_status)"
+      - "pdf_rule_candidates     (bị thay bởi api_pdf_status)"
+
+  - id: V5
+    loai: doc_du_lieu_khong_bao_gio_duoc_ghi
+    muc_do: trung_binh
+    xu_ly_o_buoc: 2
+    mo_ta: >
+      overview_router.py:372 đọc time_series_data, nhưng collection này chỉ được
+      ghi bởi scripts/copy_api_to_mongodb.py — script KHÔNG nằm trong luồng khởi
+      động (run_web.bat chỉ gọi seed_if_empty.py -> import_to_mongodb.py).
+      Trong vận hành bình thường collection này luôn rỗng.
+    diem_ma:
+      - "bank_risk_service/routers/overview_router.py:372 -> đọc"
+      - "scripts/copy_api_to_mongodb.py:90                -> ghi, không được gọi"
+
+# -----------------------------------------------------------------------------
+# DANH SÁCH NỀN  (sinh bằng: python scripts/audit/check_data_ownership.py --baseline)
+#
+# Mọi cặp (vùng mã nguồn -> collection) vượt ranh giới ĐANG tồn tại. Bộ kiểm tra
+# chỉ báo lỗi khi xuất hiện cặp MỚI ngoài danh sách này, nên nợ kỹ thuật hiện có
+# không chặn công việc, nhưng nợ mới thì không lọt qua.
+#
+# Mỗi bước của lộ trình phải làm danh sách này NGẮN đi. Xử lý xong dòng nào thì
+# xoá dòng đó — bộ kiểm tra sẽ nhắc nếu bạn quên xoá.
+#
+#   7 dòng · 2026-09-25
+#   bước 2 xong: đã xoá 3 dòng "web/ -> ..."         (42 -> 39)
+#   V6 xong:     đã xoá "scripts/ -> KetQuaTinhDiem"  (39 -> 38)
+#   bước 3 xong: đã xoá 31 dòng "scripts/ -> ..."     (38 ->  7)
+#   còn lại toàn bộ là "xep_hang_service/scripts/ -> ..." — các script nạp dữ
+#   liệu và tiện ích của module B, cần đi qua app/api.py. Mục tiêu bước 5.
+# -----------------------------------------------------------------------------
+baseline:
+  - "xep_hang_service/scripts/ -> BoTieuChi"
+  - "xep_hang_service/scripts/ -> ChiTieu"
+  - "xep_hang_service/scripts/ -> DoiTuongDanhGia"
+  - "xep_hang_service/scripts/ -> DuLieuSaiPham"
+  - "xep_hang_service/scripts/ -> DuLieuTinhDiem"
+  - "xep_hang_service/scripts/ -> KetQuaTinhDiem"
+  - "xep_hang_service/scripts/ -> NhomTieuChi"

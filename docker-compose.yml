@@ -77,6 +77,10 @@ services:
       - MONGODB_URL=${MONGO_URI:-mongodb://admin:12345678@mongodb:27017/}
       - MONGO_DB_NAME=${MONGO_DB_SCORING:-credit_scoring_db}
       - MONGODB_DB_NAME=${MONGO_DB_SCORING:-credit_scoring_db}
+    # Nguồn Excel xếp hạng. Thiếu mount này thì scripts/seed_if_empty.py của module
+    # không tìm thấy file nào (resolve_excel_folder dò /app/data/xep_hang_data).
+    volumes:
+      - ./data:/app/data:ro
     depends_on:
       mongodb:
         condition: service_healthy
@@ -92,17 +96,18 @@ services:
     restart: "no"
     ports:
       - "4000:4000"
+    # Không còn MONGO_URI: web_fe là BFF thuần, chỉ gọi HTTP tới hai service.
+    # Quyền sở hữu dữ liệu: docs/architecture/data-ownership.yml
     environment:
       - PORT=4000
-      - MONGO_URI=${MONGO_URI:-mongodb://admin:12345678@mongodb:27017/}
       - FASTAPI_URL=http://bank_risk_service:8080
       - BE_URL=http://xep_hang_service:8088
       - XEP_HANG_URL=http://xep_hang_service:8088
     volumes:
       - ./outputs:/app/outputs:ro
+    # Không phụ thuộc trực tiếp vào mongodb nữa; thứ tự khởi động vẫn được bảo
+    # đảm vì hai service bên dưới đều chờ mongodb healthy.
     depends_on:
-      mongodb:
-        condition: service_healthy
       bank_risk_service:
         condition: service_started
       xep_hang_service:

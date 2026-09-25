@@ -11,7 +11,13 @@ import pandas as pd
 import pytest
 
 warnings.filterwarnings("ignore")
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Các test import `src.*`, mà package `src` nằm trong bank_risk_service/ (từ lần
+# refactor dọn thư mục gốc). Chỉ thêm project root là chưa đủ — phải thêm cả
+# service root, nếu không toàn bộ test không collect được.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "bank_risk_service"))
 
 
 @pytest.fixture()

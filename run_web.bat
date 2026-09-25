@@ -17,9 +17,21 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo [2/3] Kiem tra va tu dong import du lieu neu chua co...
+echo   - Module giam sat rui ro (bank_risk_db)...
 docker compose exec -T bank_risk_service python /app/scripts/seed_if_empty.py
 if %ERRORLEVEL% NEQ 0 (
     python scripts/seed_if_empty.py
+)
+
+REM Moi module tu nap du lieu cua minh, trong container cua minh. Truoc day buoc
+REM nay chay trong bank_risk_service va import sang xep_hang_service bang sys.path
+REM - container do khong co ma cua module nen luon that bai am tham (V6).
+echo   - Module xep hang TCTD (credit_scoring_db)...
+docker compose exec -T xep_hang_service python scripts/seed_if_empty.py
+if %ERRORLEVEL% NEQ 0 (
+    echo   [!] Nap du lieu xep hang THAT BAI. Trang Ranking se khong co du lieu.
+    echo       Xem lai log ben tren truoc khi tiep tuc.
+    pause
 )
 
 echo.

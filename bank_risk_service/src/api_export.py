@@ -468,11 +468,42 @@ def save_to_mongo(collection_name: str, query: dict, data: dict) -> None:
         LOG.warning("MongoDB save skipped / failed: %s", exc)
 
 
+# Chèn theo lô thay vì cắt bớt. Một `insert_many` duy nhất bị chặn bởi giới hạn
+# kích thước thông điệp của MongoDB, và trước đây chỗ này né bằng cách cắt còn
+# 5.000 dòng — với tần suất `combined`, 9.747 trong 14.747 phát hiện không bao giờ
+# tới được giao diện, trong đó 489 vi phạm CRITICAL thuộc 23 kỳ báo cáo, khiến các
+# kỳ đó trông như không có vi phạm. Quyết định "giữ lại bao nhiêu" không thuộc về
+# tầng ghi dữ liệu: đã phát hiện thì phải lưu đủ.
+INSERT_BATCH_SIZE = 1000
+
+
+def _insert_all(collection, docs: list[dict], name: str) -> int:
+    """Chèn toàn bộ `docs` theo lô. Trả về số bản ghi đã ghi."""
+    written = 0
+    for start in range(0, len(docs), INSERT_BATCH_SIZE):
+        batch = docs[start:start + INSERT_BATCH_SIZE]
+        collection.insert_many(batch)
+        written += len(batch)
+    if written != len(docs):  # không bao giờ xảy ra, nhưng im lặng thì nguy hiểm
+        LOG.error("%s: chỉ ghi được %d/%d bản ghi", name, written, len(docs))
+    else:
+        LOG.info("%s: đã ghi đủ %d bản ghi", name, written)
+    return written
+
+
 # --------------------------------------------------------------------------- #
 # Writers / CLI
 # --------------------------------------------------------------------------- #
-def export_frequency(frequency: str, use_cache: bool = True) -> Path:
-    payload = build_payload(frequency, use_cache=use_cache)
+def export_frequency(frequency: str, use_cache: bool = True,
+                     payload: dict | None = None) -> Path:
+    """Ghi payload của một tần suất ra tệp JSON và MongoDB.
+
+    ``payload`` cho phép người gọi truyền lại kết quả đã dựng sẵn. db_seed từng gọi
+    ``export_frequency()`` rồi ``build_payload()`` liền sau, tức chạy trọn pipeline
+    HAI LẦN cho mỗi tần suất (riêng 'combined' là ~100 giây mỗi lượt).
+    """
+    if payload is None:
+        payload = build_payload(frequency, use_cache=use_cache)
     path = API_DIR / f"{frequency}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     LOG.info("Wrote API payload -> %s (%.1f KB)", path, path.stat().st_size / 1024)
@@ -508,7 +539,7 @@ def export_frequency(frequency: str, use_cache: bool = True) -> Path:
                 db["computed_rule_findings"].delete_many({"frequency": frequency})
                 for r in rf_list:
                     r["frequency"] = frequency
-                db["computed_rule_findings"].insert_many(rf_list[:5000])
+                _insert_all(db["computed_rule_findings"], rf_list, "computed_rule_findings")
 
             # 3. Save anomalies collection
             anom_list = payload.get("anomalies", [])
@@ -516,7 +547,7 @@ def export_frequency(frequency: str, use_cache: bool = True) -> Path:
                 db["computed_anomalies"].delete_many({"frequency": frequency})
                 for a in anom_list:
                     a["frequency"] = frequency
-                db["computed_anomalies"].insert_many(anom_list[:5000])
+                _insert_all(db["computed_anomalies"], anom_list, "computed_anomalies")
 
             # 4. Save clusters, EWS, Stress
             if "clusters" in payload:

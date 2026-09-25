@@ -14,15 +14,33 @@ import cors from "cors";
 import { spawn } from "node:child_process";
 import express from "express";
 import fs from "node:fs";
-import { MongoClient } from "mongodb";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// web/server -> project root is two levels up.
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
+// The server sits at a different depth in the repo than in the image: locally it
+// runs from <repo>/web/server, in the container from /app/server, where the
+// exports are mounted at /app/outputs. A fixed "two levels up" resolves to "/"
+// there, so API_DIR pointed at a directory that does not exist and every
+// fallback read silently returned nothing. Probe the candidates instead, the
+// same way resolve_data_dir() does on the Python side.
+function resolveProjectRoot() {
+  const candidates = [
+    process.env.PROJECT_ROOT,
+    path.resolve(__dirname, "..", ".."), // repo checkout: web/server -> repo root
+    path.resolve(__dirname, ".."),       // container image: /app/server -> /app
+  ].filter(Boolean);
+  const found = candidates.find((dir) => fs.existsSync(path.join(dir, "outputs", "api")));
+  if (!found) {
+    console.warn(`[!] Không tìm thấy outputs/api trong: ${candidates.join(", ")}. ` +
+                 `Tầng dự phòng đọc tệp JSON sẽ không hoạt động.`);
+  }
+  return found || candidates[1];
+}
+
+const PROJECT_ROOT = resolveProjectRoot();
 const API_DIR = path.join(PROJECT_ROOT, "outputs", "api");
 const REPORTS_DIR = path.join(PROJECT_ROOT, "outputs", "reports");
 const EXPORTS_DIR = path.join(PROJECT_ROOT, "outputs", "exports");
@@ -63,7 +81,15 @@ app.use((req, _res, next) => {
 const FASTAPI_URL = process.env.FASTAPI_URL || "http://127.0.0.1:8080";
 const BE_URL = process.env.BE_URL || process.env.XEP_HANG_URL || "http://127.0.0.1:8088";
 
-// Fetch payload from FastAPI server (which reads directly from MongoDB)
+// Fetch the analysis payload from the module that owns it.
+//
+// `bank_risk_db` belongs to the giam_sat_rui_ro module (see
+// docs/architecture/data-ownership.yml), so this gateway asks that module over
+// HTTP instead of querying its collections. The previous direct read of
+// `api_payloads` returned the module's *lean* document, which by design omits
+// rule_findings and anomalies — pages rendered blank instead of failing, which
+// read as "no violations found". Returning null lets the caller fall through to
+// outputs/api/<freq>.json, which carries the complete payload.
 async function getFreqPayloadFromFastAPI(freq) {
   try {
     const url = `${FASTAPI_URL}/api/data/${freq}`;
@@ -73,32 +99,9 @@ async function getFreqPayloadFromFastAPI(freq) {
       console.log(`[+] Successfully fetched data for '${freq}' from FastAPI bank_risk_service!`);
       return await res.json();
     }
+    console.warn(`FastAPI returned HTTP ${res.status} for '${freq}'; falling back to the JSON export.`);
   } catch (err) {
-    console.warn(`FastAPI unavailable at ${FASTAPI_URL}, trying direct MongoDB fallback:`, err.message);
-  }
-
-  // Fallback directly to MongoDB bank_risk_db.api_payloads collection
-  const mongoCandidates = [
-    process.env.MONGO_URI,
-    "mongodb://admin:12345678@mongodb:27017/",
-    "mongodb://admin:12345678@localhost:27018/",
-    "mongodb://admin:12345678@localhost:27017/"
-  ].filter(Boolean);
-
-  for (const mongoUri of mongoCandidates) {
-    try {
-      const client = new MongoClient(mongoUri, { serverSelectionTimeoutMS: 2000 });
-      await client.connect();
-      const db = client.db("bank_risk_db");
-      const doc = await db.collection("api_payloads").findOne({ $or: [{ _id: freq }, { frequency: freq }] });
-      await client.close();
-      if (doc) {
-        delete doc._id;
-        return doc;
-      }
-    } catch {
-      // try next candidate
-    }
+    console.warn(`FastAPI unavailable at ${FASTAPI_URL}, falling back to the JSON export:`, err.message);
   }
 
   return null;
@@ -110,39 +113,15 @@ app.get("/api/be/tinh-diem/ket-qua", async (req, res) => {
     const queryParams = new URLSearchParams(req.query).toString();
     const beRes = await fetch(`${BE_URL}/tinh-diem/ket-qua${queryParams ? `?${queryParams}` : ""}`, { signal: AbortSignal.timeout(2000) });
     if (beRes.ok) {
-      const data = await beRes.json();
-      if (data && data.data && data.data.length > 0) {
-        return res.json(data);
-      }
+      // Return the module's answer as-is, including an empty list. Treating
+      // "empty" as a failure used to fall through to a query that applied only
+      // part of the filters and a smaller limit, so a filter that legitimately
+      // matched nothing could still come back with rows.
+      return res.json(await beRes.json());
     }
+    console.warn(`Credit scoring service returned HTTP ${beRes.status}; using the precomputed export.`);
   } catch (err) {
-    console.warn(`BE at ${BE_URL} unavailable, falling back to MongoDB KetQuaTinhDiem:`, err.message);
-  }
-
-  const mongoCandidates = [
-    process.env.MONGO_URI,
-    "mongodb://admin:12345678@mongodb:27017/",
-    "mongodb://admin:12345678@localhost:27018/",
-    "mongodb://admin:12345678@localhost:27017/"
-  ].filter(Boolean);
-
-  for (const mongoUri of mongoCandidates) {
-    try {
-      const client = new MongoClient(mongoUri, { serverSelectionTimeoutMS: 2000 });
-      await client.connect();
-      const db = client.db("credit_scoring_db");
-      const query = { is_active: 1 };
-      if (req.query.ky_du_lieu) query.ky_du_lieu = String(req.query.ky_du_lieu);
-      if (req.query.doi_tuong_id) query.$or = [{ doi_tuong_id: String(req.query.doi_tuong_id) }, { ma_doi_tuong: String(req.query.doi_tuong_id) }];
-      const limit = parseInt(req.query.limit || "100", 10);
-      const items = await db.collection("KetQuaTinhDiem").find(query).sort({ ngay_tinh: -1 }).limit(limit).toArray();
-      await client.close();
-      if (items && items.length > 0) {
-        return res.json({ code: 200, message: "Success", data: items });
-      }
-    } catch {
-      // try next candidate
-    }
+    console.warn(`BE at ${BE_URL} unavailable, using the precomputed export:`, err.message);
   }
 
   // Load precomputed 31 bank rankings fallback data
@@ -178,23 +157,21 @@ app.get("/api/be/tinh-diem/lich-su/:doi_tuong_id", async (req, res) => {
     if (beRes.ok) {
       return res.json(await beRes.json());
     }
+    console.warn(`Credit scoring service returned HTTP ${beRes.status} for lich-su/${doi_tuong_id}.`);
   } catch (err) {
-    console.warn(`BE at ${BE_URL} unavailable for lich-su, falling back to MongoDB:`, err.message);
+    console.warn(`BE at ${BE_URL} unavailable for lich-su:`, err.message);
   }
 
-  try {
-    const client = new MongoClient(process.env.MONGO_URI || "mongodb://admin:12345678@localhost:27017/", { serverSelectionTimeoutMS: 2000 });
-    await client.connect();
-    const db = client.db("credit_scoring_db");
-    const items = await db.collection("KetQuaTinhDiem").find({
-      is_active: 1,
-      $or: [{ doi_tuong_id: doi_tuong_id }, { ma_doi_tuong: doi_tuong_id }]
-    }).sort({ ky_du_lieu: 1 }).toArray();
-    await client.close();
-    return res.json({ code: 200, message: "Success", data: items });
-  } catch (dbErr) {
-    return res.json({ code: 200, message: "Success (Fallback)", data: [] });
-  }
+  // `KetQuaTinhDiem` belongs to the xep_hang_tctd module, so there is no second
+  // route to it from here. That module already falls back to its precomputed
+  // export when its own database is unreachable, so reaching this line means the
+  // module itself is down — say so rather than reporting an empty history as a
+  // successful answer.
+  return res.status(503).json({
+    code: 503,
+    message: "Dịch vụ xếp hạng tạm thời không phản hồi. Vui lòng thử lại.",
+    data: []
+  });
 });
 
 // Dedicated proxy endpoint to fetch DoiTuongDanhGia list
@@ -205,7 +182,7 @@ app.get("/api/be/doi-tuong-danh-gia", async (req, res) => {
       return res.json(await beRes.json());
     }
   } catch (err) {
-    console.warn(`BE at ${BE_URL} unavailable for doi-tuong-danh-gia, falling back to MongoDB:`, err.message);
+    console.warn(`BE at ${BE_URL} unavailable for doi-tuong-danh-gia:`, err.message);
   }
 
   const DEFAULT_BANKS = [
@@ -242,20 +219,14 @@ app.get("/api/be/doi-tuong-danh-gia", async (req, res) => {
     { _id: "SCB", ma_doi_tuong: "SCB", ten_doi_tuong: "Ngân hàng TMCP Sài Gòn", ten_viet_tat: "SCB", ma_loai_doi_tuong: "NHTM_VUA_VA_NHO", is_active: 1 }
   ];
 
-  try {
-    const client = new MongoClient(process.env.MONGO_URI || "mongodb://admin:12345678@localhost:27017/", { serverSelectionTimeoutMS: 2000 });
-    await client.connect();
-    const db = client.db("credit_scoring_db");
-    const items = await db.collection("DoiTuongDanhGia").find({ is_active: 1 }).sort({ ma_doi_tuong: 1 }).toArray();
-    await client.close();
-    if (items && items.length > 0) {
-      return res.json({ code: 200, message: "Success", data: items });
-    }
-    return res.json({ code: 200, message: "Success (Fallback)", data: DEFAULT_BANKS });
-  } catch (dbErr) {
-    console.warn("MongoDB connection failed for doi-tuong-danh-gia, using fallback list:", dbErr.message);
-    return res.json({ code: 200, message: "Success (Fallback)", data: DEFAULT_BANKS });
-  }
+  // `DoiTuongDanhGia` belongs to the xep_hang_tctd module, so this gateway no
+  // longer queries it. DEFAULT_BANKS above is a static copy of that module's
+  // master data, kept only so the institution picker still renders while the
+  // module is down. It can go stale — a renamed or newly licensed institution
+  // will not appear here. Tracked as a V1 follow-up in
+  // docs/architecture/data-ownership.md.
+  console.warn("Credit scoring service unavailable for doi-tuong-danh-gia; serving the static institution list.");
+  return res.json({ code: 200, message: "Success (Fallback)", data: DEFAULT_BANKS });
 });
 
 
